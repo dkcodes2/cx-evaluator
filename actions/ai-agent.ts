@@ -3,7 +3,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import * as cheerio from "cheerio"
 
-// Simple in-memory cache (Note: This will reset on server restart)
+// Simple in-memory cache (Resets upon every server restart)
 const cache: { [url: string]: { result: string; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
 
@@ -120,7 +120,7 @@ Specific Actionable Items:
       throw new Error("Failed to generate analysis")
     }
 
-    // Cache the result
+    // Cache result for consistent scoring
     cache[url] = { result: text, timestamp: Date.now() }
 
     return text
