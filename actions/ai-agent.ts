@@ -3,9 +3,43 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import * as cheerio from "cheerio"
 
-// Simple in-memory cache (Resets upon every server restart)
+// Simple in-memory cache (Note: This will reset on server restart)
 const cache: { [url: string]: { result: string; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
+
+async function fetchWebsiteContent(url: string) {
+  const response = await fetch(url)
+  const html = await response.text()
+  const $ = cheerio.load(html)
+
+  const data = {
+    title: $("title").text(),
+    description: $('meta[name="description"]').attr("content") || "",
+    h1Tags: $("h1")
+      .map((_, el) => $(el).text())
+      .get(),
+    links: $("a")
+      .map((_, el) => $(el).attr("href"))
+      .get(),
+  }
+
+  // Fetch content from up to 3 product pages
+  const productLinks = data.links.filter((link) => link && (link.includes("/product") || link.includes("/item")))
+  for (let i = 0; i < Math.min(3, productLinks.length); i++) {
+    const productUrl = new URL(productLinks[i], url).href
+    const productResponse = await fetch(productUrl)
+    const productHtml = await productResponse.text()
+    const $product = cheerio.load(productHtml)
+
+    data[`product${i + 1}`] = {
+      title: $product("title").text(),
+      description: $product('meta[name="description"]').attr("content") || "",
+      price: $product('.price, [class*="price"]').first().text() || "N/A",
+    }
+  }
+
+  return data
+}
 
 export async function analyzeWebsite(url: string) {
   try {
@@ -18,28 +52,37 @@ export async function analyzeWebsite(url: string) {
       throw new Error("GOOGLE_API_KEY is not configured in environment variables")
     }
 
-    const fetchResponse = await fetch(url)
-    if (!fetchResponse.ok) {
-      throw new Error(`Failed to fetch website: ${fetchResponse.statusText}`)
-    }
-    const html = await fetchResponse.text()
-
-    const $ = cheerio.load(html)
-    const title = $("title").text()
-    const description = $('meta[name="description"]').attr("content") || ""
-    const h1Tags = $("h1")
-      .map((i, el) => $(el).text())
-      .get()
+    const websiteData = await fetchWebsiteContent(url)
 
     const contentForAnalysis = `
 Website URL: ${url}
-Title: ${title}
-Description: ${description}
-Main Headings: ${h1Tags.join(", ")}
+Title: ${websiteData.title}
+Description: ${websiteData.description}
+Main Headings: ${websiteData.h1Tags.join(", ")}
+Number of Links: ${websiteData.links.length}
+Product 1: ${JSON.stringify(websiteData.product1)}
+Product 2: ${JSON.stringify(websiteData.product2)}
+Product 3: ${JSON.stringify(websiteData.product3)}
     `.trim()
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
     const model = genAI.getGenerativeModel({ model: "gemini-pro" })
+
+    // First, check if the website is an e-commerce site
+    const ecommerceCheckPrompt = `
+Analyze the following website content and determine if it is an e-commerce website.
+Respond with only "YES" if it is an e-commerce website, or "NO" if it is not.
+
+${contentForAnalysis}
+`
+
+    const ecommerceCheckResult = await model.generateContent(ecommerceCheckPrompt)
+    const ecommerceCheckResponse = await ecommerceCheckResult.response
+    const isEcommerce = ecommerceCheckResponse.text().trim().toUpperCase() === "YES"
+
+    if (!isEcommerce) {
+      return JSON.stringify({ isEcommerce: false, message: "This website does not appear to be an e-commerce site." })
+    }
 
     const prompt = `Analyze this e-commerce website content and provide a balanced, fair CX (Customer Experience) evaluation. Evaluate the following aspects:
 
@@ -85,17 +128,6 @@ Weaknesses:
 • [Weakness 2]
 • [Weakness 3]
 
-User Journey: [score]/100
-Rationale: [2-3 sentences explaining the score and comparing to industry benchmark]
-Strengths:
-• [Strength 1]
-• [Strength 2]
-• [Strength 3]
-Weaknesses:
-• [Weakness 1]
-• [Weakness 2]
-• [Weakness 3]
-
 [Repeat the above format for the remaining aspects]
 
 Detailed Summary:
@@ -111,7 +143,6 @@ Specific Actionable Items:
 • Additional Recommendation: [Detailed, specific action item]
 `
 
-    // Perform a single analysis
     const result = await model.generateContent(prompt)
     const response = await result.response
     const text = response.text()
@@ -120,16 +151,17 @@ Specific Actionable Items:
       throw new Error("Failed to generate analysis")
     }
 
-    // Cache result for consistent scoring
-    cache[url] = { result: text, timestamp: Date.now() }
+    const finalResult = JSON.stringify({ isEcommerce: true, analysis: text })
 
-    return text
+    // Cache the result
+    cache[url] = { result: finalResult, timestamp: Date.now() }
+
+    return finalResult
   } catch (error) {
     console.error("Error analyzing website:", error)
     if (error instanceof Error) {
-      return `An error occurred while analyzing the website: ${error.message}`
+      return JSON.stringify({ error: `An error occurred while analyzing the website: ${error.message}` })
     }
-    return "An unexpected error occurred while analyzing the website."
+    return JSON.stringify({ error: "An unexpected error occurred while analyzing the website." })
   }
 }
-

@@ -57,21 +57,23 @@ export default function Home() {
 
     try {
       console.log("Starting analysis for URL:", url)
-      const result = await analyzeWebsite(url)
+      const resultString = await analyzeWebsite(url)
+      const result = JSON.parse(resultString)
       console.log("Analysis result received:", result)
 
-      if (result.startsWith("An error occurred")) {
-        setError(result)
-      } else if (!result || result.trim() === "") {
-        setError("The analysis returned no results. Please try again.")
+      if (result.error) {
+        setError(result.error)
+      } else if (!result.isEcommerce) {
+        setError(result.message)
       } else {
+        const analysis = result.analysis
         const componentResults: AnalysisComponent[] = []
         componentNames.forEach((name) => {
-          const componentMatch = result.match(
+          const componentMatch = analysis.match(
             new RegExp(`${name}: (\\d+)/100\nRationale: ([\\s\\S]*?)(?=\nStrengths:)`),
           )
-          const strengthsMatch = result.match(new RegExp(`${name}: \\d+/100[\\s\\S]*?Strengths:\n((?:• .*\n){3})`))
-          const weaknessesMatch = result.match(new RegExp(`${name}: \\d+/100[\\s\\S]*?Weaknesses:\n((?:• .*\n){3})`))
+          const strengthsMatch = analysis.match(new RegExp(`${name}: \\d+/100[\\s\\S]*?Strengths:\n((?:• .*\n){3})`))
+          const weaknessesMatch = analysis.match(new RegExp(`${name}: \\d+/100[\\s\\S]*?Weaknesses:\n((?:• .*\n){3})`))
           if (componentMatch && strengthsMatch && weaknessesMatch) {
             componentResults.push({
               name,
@@ -79,14 +81,14 @@ export default function Home() {
               rationale: componentMatch[2].trim(),
               strengths: strengthsMatch[1]
                 .split("\n")
-                .map((s) => s.trim())
-                .filter((s) => s.startsWith("•"))
-                .map((s) => s.substring(1).trim()),
+                .map((s: string) => s.trim())
+                .filter((s: string) => s.startsWith("•"))
+                .map((s: string) => s.substring(1).trim()),
               weaknesses: weaknessesMatch[1]
                 .split("\n")
-                .map((s) => s.trim())
-                .filter((s) => s.startsWith("•"))
-                .map((s) => s.substring(1).trim()),
+                .map((s: string) => s.trim())
+                .filter((s: string) => s.startsWith("•"))
+                .map((s: string) => s.substring(1).trim()),
             })
           }
         })
@@ -101,22 +103,22 @@ export default function Home() {
           const calculatedOverallScore = Math.round(totalScore / componentResults.length)
           setOverallScore(calculatedOverallScore)
 
-          const summaryMatch = result.match(/Detailed Summary:\n([\s\S]*?)(?=\n\nSpecific Actionable Items:)/)
+          const summaryMatch = analysis.match(/Detailed Summary:\n([\s\S]*?)(?=\n\nSpecific Actionable Items:)/)
           if (summaryMatch) {
             setSummary(summaryMatch[1].trim())
           }
 
-          const actionableItemsMatch = result.match(/Specific Actionable Items:\n([\s\S]*?)$/)
+          const actionableItemsMatch = analysis.match(/Specific Actionable Items:\n([\s\S]*?)$/)
           if (actionableItemsMatch) {
             const items = actionableItemsMatch[1]
               .split("\n")
-              .map((item) => item.trim())
-              .filter((item) => item.startsWith("•"))
-              .map((item) => {
+              .map((item: string) => item.trim())
+              .filter((item: string) => item.startsWith("•"))
+              .map((item: { substring: (arg0: number) => { (): any; new(): any; split: { (arg0: string): { (): any; new(): any; map: { (arg0: (s: any) => any): [any, any]; new(): any } }; new(): any } } }) => {
                 const [category, action] = item
                   .substring(1)
                   .split(":")
-                  .map((s) => s.trim())
+                  .map((s: string) => s.trim())
                 return { category, action }
               })
             setActionableItems(items)
@@ -138,7 +140,7 @@ export default function Home() {
       <div className="container mx-auto p-4">
         <Card className="bg-white shadow-lg">
           <CardHeader className="bg-[#4285F4]">
-            <CardTitle className="text-2xl font-bold text-white">Website Analyzer</CardTitle>
+            <CardTitle className="text-2xl font-bold text-white">E-commerce Website Analyzer</CardTitle>
           </CardHeader>
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -146,7 +148,7 @@ export default function Home() {
                 type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="Enter website URL (e.g., https://example.com)"
+                placeholder="Enter e-commerce website URL (e.g., https://example.com)"
                 className="flex-grow"
               />
               <Button
@@ -165,15 +167,7 @@ export default function Home() {
               <Alert variant="destructive" className="mt-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Error</AlertTitle>
-                <AlertDescription>
-                  {error}
-                  {error === "The analysis returned no results. Please try again." && (
-                    <p className="mt-2">
-                      Sometimes the analysis may fail due to temporary issues. Please try clicking the "Analyze Website"
-                      button again.
-                    </p>
-                  )}
-                </AlertDescription>
+                <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
 
@@ -181,7 +175,10 @@ export default function Home() {
               <Alert className="mt-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Analyzing</AlertTitle>
-                <AlertDescription>Please wait while we analyze the website...</AlertDescription>
+                <AlertDescription>
+                  Please wait while we analyze the website... This may take a few minutes as we simulate user flow
+                  across multiple pages.
+                </AlertDescription>
               </Alert>
             )}
 

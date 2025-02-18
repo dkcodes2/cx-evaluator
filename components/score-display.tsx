@@ -27,4 +27,3 @@ export function ScoreDisplay({ component, score, description }: ScoreDisplayProp
     </div>
   )
 }
-
