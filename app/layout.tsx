@@ -3,8 +3,8 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'CX Evaluator',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+  description: 'Evaluator for Ecommerce Websites',
+  generator: 'dk',
 }
 
 export default function RootLayout({
