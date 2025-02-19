@@ -58,11 +58,12 @@ export default function Home() {
     try {
       console.log("Starting analysis for URL:", url)
       const resultString = await analyzeWebsite(url)
+      console.log("Raw result:", resultString)
       const result = JSON.parse(resultString)
-      console.log("Analysis result received:", result)
+      console.log("Parsed result:", result)
 
       if (result.error) {
-        setError(result.error)
+        setError(`${result.error}\n\nDetails: ${result.details || "No additional details available"}`)
       } else if (!result.isEcommerce) {
         setError(result.message)
       } else {
@@ -256,4 +257,3 @@ export default function Home() {
     </div>
   )
 }
-

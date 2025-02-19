@@ -8,37 +8,53 @@ const cache: { [url: string]: { result: string; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
 
 async function fetchWebsiteContent(url: string) {
-  const response = await fetch(url)
-  const html = await response.text()
-  const $ = cheerio.load(html)
-
-  const data = {
-    title: $("title").text(),
-    description: $('meta[name="description"]').attr("content") || "",
-    h1Tags: $("h1")
-      .map((_, el) => $(el).text())
-      .get(),
-    links: $("a")
-      .map((_, el) => $(el).attr("href"))
-      .get(),
-  }
-
-  // Fetch content from up to 3 product pages
-  const productLinks = data.links.filter((link) => link && (link.includes("/product") || link.includes("/item")))
-  for (let i = 0; i < Math.min(3, productLinks.length); i++) {
-    const productUrl = new URL(productLinks[i], url).href
-    const productResponse = await fetch(productUrl)
-    const productHtml = await productResponse.text()
-    const $product = cheerio.load(productHtml)
-
-    data[`product${i + 1}`] = {
-      title: $product("title").text(),
-      description: $product('meta[name="description"]').attr("content") || "",
-      price: $product('.price, [class*="price"]').first().text() || "N/A",
+  console.log(`Fetching content for URL: ${url}`)
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
     }
-  }
+    const html = await response.text()
+    console.log(`Successfully fetched HTML content for ${url}`)
+    const $ = cheerio.load(html)
 
-  return data
+    const data = {
+      title: $("title").text(),
+      description: $('meta[name="description"]').attr("content") || "",
+      h1Tags: $("h1")
+        .map((_, el) => $(el).text())
+        .get(),
+      links: $("a")
+        .map((_, el) => $(el).attr("href"))
+        .get(),
+    }
+
+    // Fetch content from up to 3 product pages
+    const productLinks = data.links.filter((link) => link && (link.includes("/product") || link.includes("/item")))
+    for (let i = 0; i < Math.min(3, productLinks.length); i++) {
+      const productUrl = new URL(productLinks[i], url).href
+      const productResponse = await fetch(productUrl)
+      const productHtml = await productResponse.text()
+      const $product = cheerio.load(productHtml)
+
+      data[`product${i + 1}`] = {
+        title: $product("title").text(),
+        description: $product('meta[name="description"]').attr("content") || "",
+        price: $product('.price, [class*="price"]').first().text() || "N/A",
+      }
+    }
+
+    console.log(`Processed website data for ${url}:`, data)
+    return data
+  } catch (error) {
+    console.error(`Error fetching website content for ${url}:`, error)
+    throw error
+  }
 }
 
 export async function analyzeWebsite(url: string) {
@@ -52,7 +68,9 @@ export async function analyzeWebsite(url: string) {
       throw new Error("GOOGLE_API_KEY is not configured in environment variables")
     }
 
+    console.log(`Fetching website content for ${url}`)
     const websiteData = await fetchWebsiteContent(url)
+    console.log(`Website data fetched successfully for ${url}`)
 
     const contentForAnalysis = `
 Website URL: ${url}
@@ -64,6 +82,8 @@ Product 1: ${JSON.stringify(websiteData.product1)}
 Product 2: ${JSON.stringify(websiteData.product2)}
 Product 3: ${JSON.stringify(websiteData.product3)}
     `.trim()
+
+    console.log(`Content prepared for analysis:`, contentForAnalysis)
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
     const model = genAI.getGenerativeModel({ model: "gemini-pro" })
@@ -160,8 +180,14 @@ Specific Actionable Items:
   } catch (error) {
     console.error("Error analyzing website:", error)
     if (error instanceof Error) {
-      return JSON.stringify({ error: `An error occurred while analyzing the website: ${error.message}` })
+      return JSON.stringify({
+        error: `An error occurred while analyzing the website: ${error.message}`,
+        details: error.stack,
+      })
     }
-    return JSON.stringify({ error: "An unexpected error occurred while analyzing the website." })
+    return JSON.stringify({
+      error: "An unexpected error occurred while analyzing the website.",
+      details: String(error),
+    })
   }
 }
