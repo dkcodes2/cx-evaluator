@@ -17,6 +17,8 @@ async function fetchPage(url: string) {
       "Accept-Language": "en-US,en;q=0.5",
       Connection: "keep-alive",
       "Upgrade-Insecure-Requests": "1",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
     },
   })
   if (!response.ok) {
@@ -25,78 +27,139 @@ async function fetchPage(url: string) {
   return await response.text()
 }
 
-function findCartIcon($: cheerio.CheerioAPI): string | null {
-  // Common cart icon selectors
-  const cartSelectors = [
-    'a[href*="cart"]',
-    'a[href*="basket"]',
-    'a[href*="bag"]',
-    '[class*="cart"]',
-    '[class*="basket"]',
-    '[class*="bag"]',
-    '[aria-label*="cart" i]',
-    '[aria-label*="basket" i]',
-    '[aria-label*="bag" i]',
-    '[title*="cart" i]',
-    '[title*="basket" i]',
-    '[title*="bag" i]',
-  ]
+function findNavigationElements($: cheerio.CheerioAPI): string[] {
+  const links = new Set<string>()
 
-  for (const selector of cartSelectors) {
-    const element = $(selector).first()
-    if (element.length) {
-      return element.attr("href") || null
-    }
-  }
-  return null
-}
-
-function findCategoryLinks($: cheerio.CheerioAPI): string[] {
-  // Common category link selectors
-  const categorySelectors = [
-    'a[href*="/category"]',
-    'a[href*="/collection"]',
-    'a[href*="/department"]',
-    'a[href*="/shop"]',
-    '[class*="category-link"]',
-    '[class*="collection-link"]',
-    "nav a", // General navigation links
+  // Common navigation selectors
+  const navigationSelectors = [
+    // Standard navigation elements
+    "nav a",
+    "header a",
     "#navigation a",
     ".navigation a",
     ".menu a",
+    ".nav a",
+
+    // Common e-commerce navigation patterns
+    '[class*="menu"] a',
+    '[class*="nav"] a',
+    '[role="navigation"] a',
+    '[aria-label*="navigation" i] a',
+    '[aria-label*="menu" i] a',
+
+    // Common category/department links
+    'a[href*="/category"]',
+    'a[href*="/c/"]',
+    'a[href*="/department"]',
+    'a[href*="/d/"]',
+    'a[href*="/shop"]',
+    'a[href*="/collection"]',
+
+    // Common menu item patterns
+    ".menu-item a",
+    ".nav-item a",
+    '[class*="menu-item"] a',
+    '[class*="nav-item"] a',
+
+    // Specific to major e-commerce platforms
+    "#nav-main a", // Amazon-like
+    "#main-menu a", // Common pattern
+    ".department-menu a", // Walmart-like
+    ".category-menu a", // Common pattern
+    '[data-nav-role="link"]', // Custom data attributes
+    '[data-nav-type="category"]', // Custom data attributes
+
+    // Mega menu patterns
+    ".mega-menu a",
+    '[class*="mega-menu"] a',
+    ".dropdown-menu a",
+    '[class*="dropdown"] a',
   ]
 
-  const links = new Set<string>()
-
-  categorySelectors.forEach((selector) => {
+  navigationSelectors.forEach((selector) => {
     $(selector).each((_, el) => {
-      const href = $(el).attr("href")
-      if (href && !href.includes("javascript:") && !href.startsWith("#")) {
-        links.add(href)
+      const $el = $(el)
+      const href = $el.attr("href")
+      const text = $el.text().trim()
+
+      // Skip if no href or if it's a non-navigation link
+      if (
+        !href ||
+        href.startsWith("#") ||
+        href.startsWith("javascript:") ||
+        href.includes("login") ||
+        href.includes("signin") ||
+        href.includes("account") ||
+        href.includes("cart") ||
+        href.includes("checkout")
+      ) {
+        return
       }
+
+      // Skip common non-category links
+      const skipWords = ["about", "contact", "help", "faq", "support", "privacy", "terms"]
+      if (skipWords.some((word) => href.toLowerCase().includes(word) || text.toLowerCase().includes(word))) {
+        return
+      }
+
+      links.add(href)
     })
   })
 
   return Array.from(links)
 }
 
-function findProductLinks($: cheerio.CheerioAPI): string[] {
-  // Common product link selectors
-  const productSelectors = [
-    'a[href*="/product"]',
-    'a[href*="/item"]',
-    '[class*="product-link"]',
-    '[class*="product-card"]',
-    '[class*="product-title"]',
-    ".product a",
-  ]
-
+function findProductElements($: cheerio.CheerioAPI): string[] {
   const links = new Set<string>()
+
+  // Common product link patterns
+  const productSelectors = [
+    // Standard product elements
+    'a[href*="/product"]',
+    'a[href*="/p/"]',
+    'a[href*="/item"]',
+    'a[href*="/i/"]',
+
+    // Common product card patterns
+    '[class*="product-card"] a',
+    '[class*="product-tile"] a',
+    '[class*="product-item"] a',
+    '[class*="productCard"] a',
+    '[class*="productTile"] a',
+
+    // Product grid/list patterns
+    ".products-grid a",
+    ".product-list a",
+    ".product-grid a",
+    '[class*="product-grid"] a',
+    '[class*="product-list"] a',
+
+    // Common e-commerce patterns
+    "[data-product-id] a",
+    "[data-item-id] a",
+    '[class*="product"] a',
+
+    // Product title/name patterns
+    ".product-title a",
+    ".product-name a",
+    '[class*="product-title"] a',
+    '[class*="product-name"] a',
+
+    // Specific to major e-commerce platforms
+    "[data-asin] a", // Amazon-like
+    "[data-product] a", // Common pattern
+    "[data-sku] a", // Common pattern
+
+    // Product link patterns
+    'a[href*="dp/"]', // Amazon-like
+    'a[href*="prod"]', // Common pattern
+    'a[href*="sku"]', // Common pattern
+  ]
 
   productSelectors.forEach((selector) => {
     $(selector).each((_, el) => {
       const href = $(el).attr("href")
-      if (href && !href.includes("javascript:") && !href.startsWith("#")) {
+      if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
         links.add(href)
       }
     })
@@ -106,17 +169,47 @@ function findProductLinks($: cheerio.CheerioAPI): string[] {
 }
 
 function findAddToCartButton($: cheerio.CheerioAPI) {
-  // Common add to cart button selectors
+  // Common add to cart button patterns
   const addToCartSelectors = [
+    // Standard buttons
     'button[class*="add-to-cart"]',
     'button[class*="add-to-bag"]',
     'button[class*="add-to-basket"]',
+
+    // Button text patterns
     'button:contains("Add to Cart")',
     'button:contains("Add to Bag")',
     'button:contains("Add to Basket")',
+
+    // ARIA patterns
     '[aria-label*="add to cart" i]',
     '[aria-label*="add to bag" i]',
     '[aria-label*="add to basket" i]',
+
+    // Common class patterns
+    '[class*="add-to-cart"]',
+    '[class*="addToCart"]',
+    '[class*="add-to-bag"]',
+    '[class*="addToBag"]',
+
+    // Form submit buttons
+    'form[action*="cart"] button[type="submit"]',
+    'form[action*="basket"] button[type="submit"]',
+
+    // Data attribute patterns
+    '[data-action="add-to-cart"]',
+    '[data-button-action="add-to-cart"]',
+
+    // Specific to major e-commerce platforms
+    "#add-to-cart-button", // Amazon-like
+    "#addToCart", // Common pattern
+    ".add-to-cart-button", // Common pattern
+
+    // Generic buttons with cart-related text
+    'button[id*="cart" i]',
+    'button[class*="cart" i]',
+    'button[id*="basket" i]',
+    'button[class*="basket" i]',
   ]
 
   for (const selector of addToCartSelectors) {
@@ -127,6 +220,60 @@ function findAddToCartButton($: cheerio.CheerioAPI) {
         isProminent:
           element.is('[class*="primary"], [class*="main"], [class*="prominent"]') ||
           element.css("background-color") !== "transparent",
+      }
+    }
+  }
+  return null
+}
+
+function findCartIcon($: cheerio.CheerioAPI): string | null {
+  // Common cart icon patterns
+  const cartSelectors = [
+    // Standard cart links
+    'a[href*="cart"]',
+    'a[href*="basket"]',
+    'a[href*="bag"]',
+
+    // Class patterns
+    '[class*="cart"]',
+    '[class*="basket"]',
+    '[class*="bag"]',
+    '[class*="shopping"]',
+
+    // ARIA patterns
+    '[aria-label*="cart" i]',
+    '[aria-label*="basket" i]',
+    '[aria-label*="bag" i]',
+    '[aria-label*="shopping" i]',
+
+    // Title patterns
+    '[title*="cart" i]',
+    '[title*="basket" i]',
+    '[title*="bag" i]',
+
+    // Icon patterns
+    '[class*="icon-cart"]',
+    '[class*="cart-icon"]',
+    '[class*="icon-basket"]',
+    '[class*="basket-icon"]',
+
+    // Specific to major e-commerce platforms
+    "#nav-cart", // Amazon-like
+    "#mini-cart", // Common pattern
+    ".shopping-cart", // Common pattern
+
+    // Data attribute patterns
+    '[data-role="cart"]',
+    '[data-action="cart"]',
+  ]
+
+  for (const selector of cartSelectors) {
+    const element = $(selector).first()
+    if (element.length) {
+      // Try to find the closest anchor tag if the element itself is not an anchor
+      const anchor = element.is("a") ? element : element.closest("a")
+      if (anchor.length) {
+        return anchor.attr("href") || null
       }
     }
   }
@@ -150,59 +297,97 @@ async function simulateUserFlow(baseUrl: string) {
         .get(),
     }
 
-    // Step 2: Find and visit a category page
-    const categoryLinks = findCategoryLinks($homepage)
-    console.log(`Found ${categoryLinks.length} category links`)
+    // Step 2: Find navigation links and visit a category page
+    const navigationLinks = findNavigationElements($homepage)
+    console.log(`Found ${navigationLinks.length} navigation links`)
 
-    if (categoryLinks.length > 0) {
-      const categoryUrl = new URL(categoryLinks[0], baseUrl).href
-      const categoryHtml = await fetchPage(categoryUrl)
-      const $category = cheerio.load(categoryHtml)
+    if (navigationLinks.length > 0) {
+      // Try each navigation link until we find one that works
+      for (const link of navigationLinks.slice(0, 5)) {
+        // Try first 5 links
+        try {
+          const categoryUrl = new URL(link, baseUrl).href
+          console.log(`Trying category URL: ${categoryUrl}`)
+          const categoryHtml = await fetchPage(categoryUrl)
+          const $category = cheerio.load(categoryHtml)
 
-      data.category = {
-        url: categoryUrl,
-        title: $category("title").text(),
-        productCount: $category('[class*="product"]').length,
+          // Check if this page has product elements
+          const productElements = $category('[class*="product"], [data-product], [data-asin]')
+          if (productElements.length > 0) {
+            data.category = {
+              url: categoryUrl,
+              title: $category("title").text(),
+              productCount: productElements.length,
+            }
+            break
+          }
+        } catch (error) {
+          console.log(`Failed to process category link ${link}:`, error)
+          continue
+        }
       }
+    }
 
-      // Step 3: Find and visit a product page
-      const productLinks = findProductLinks($category)
+    // Step 3: Find and visit a product page
+    if (data.category) {
+      const $category = cheerio.load(await fetchPage(data.category.url))
+      const productLinks = findProductElements($category)
       console.log(`Found ${productLinks.length} product links`)
 
       if (productLinks.length > 0) {
-        const productUrl = new URL(productLinks[0], baseUrl).href
-        const productHtml = await fetchPage(productUrl)
-        const $product = cheerio.load(productHtml)
+        // Try each product link until we find one that works
+        for (const link of productLinks.slice(0, 5)) {
+          // Try first 5 links
+          try {
+            const productUrl = new URL(link, baseUrl).href
+            console.log(`Trying product URL: ${productUrl}`)
+            const productHtml = await fetchPage(productUrl)
+            const $product = cheerio.load(productHtml)
 
-        const addToCartButton = findAddToCartButton($product)
+            const addToCartButton = findAddToCartButton($product)
+            const price = $product('[class*="price"], [data-price], .price').first().text()
 
-        data.product = {
-          url: productUrl,
-          title: $product("title").text(),
-          price: $product('[class*="price"]').first().text() || "N/A",
-          description:
-            $product('meta[name="description"]').attr("content") ||
-            $product('[class*="product-description"]').first().text() ||
-            "N/A",
-        }
+            if (price || addToCartButton) {
+              data.product = {
+                url: productUrl,
+                title: $product("title").text(),
+                price: price || "N/A",
+                description:
+                  $product('meta[name="description"]').attr("content") ||
+                  $product('[class*="product-description"], [class*="description"]').first().text() ||
+                  "N/A",
+              }
 
-        if (addToCartButton) {
-          data.addToCart = addToCartButton
-        }
-
-        // Step 4: Try to find cart page
-        const cartUrl = findCartIcon($product)
-        if (cartUrl) {
-          const fullCartUrl = new URL(cartUrl, baseUrl).href
-          const cartHtml = await fetchPage(fullCartUrl)
-          const $cart = cheerio.load(cartHtml)
-
-          data.cart = {
-            url: fullCartUrl,
-            title: $cart("title").text(),
-            itemCount: $cart('[class*="cart-item"], [class*="bag-item"], [class*="basket-item"]').length,
+              if (addToCartButton) {
+                data.addToCart = addToCartButton
+              }
+              break
+            }
+          } catch (error) {
+            console.log(`Failed to process product link ${link}:`, error)
+            continue
           }
         }
+      }
+    }
+
+    // Step 4: Try to find cart page
+    const cartUrl = findCartIcon($homepage) // Try finding cart from homepage first
+    if (cartUrl) {
+      try {
+        const fullCartUrl = new URL(cartUrl, baseUrl).href
+        console.log(`Found cart URL: ${fullCartUrl}`)
+        const cartHtml = await fetchPage(fullCartUrl)
+        const $cart = cheerio.load(cartHtml)
+
+        data.cart = {
+          url: fullCartUrl,
+          title: $cart("title").text(),
+          itemCount: $cart('[class*="cart-item"], [class*="bag-item"], [class*="basket-item"], [data-cart-item]')
+            .length,
+        }
+      } catch (error) {
+        console.log("Failed to process cart page:", error)
       }
     }
 
@@ -248,7 +433,7 @@ Price: ${websiteData.product?.price || "N/A"}
 Description: ${websiteData.product?.description || "N/A"}
 
 Add to Cart:
-Button Text: ${websiteData.addToCart?.buttonText || "N/A"}
+Button Text: ${websiteData.addToCart?.text || "N/A"}
 Is Prominent: ${websiteData.addToCart?.isProminent ? "Yes" : "No"}
 
 Cart Page:
@@ -365,3 +550,4 @@ Specific Actionable Items:
     })
   }
 }
+
