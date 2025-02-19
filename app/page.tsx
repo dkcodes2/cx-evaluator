@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, CheckCircle2 } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
@@ -241,9 +241,12 @@ export default function Home() {
                     <h2 className="text-xl font-bold mb-2 text-[#4285F4]">Specific Actionable Items</h2>
                     <ul className="bg-white p-4 rounded-lg text-black border border-[#e8f0fe] space-y-2">
                       {actionableItems.map((item, index) => (
-                        <li key={index} className="mb-2">
-                          <span className="font-semibold text-[#4285F4]">{item.category}:</span>{" "}
-                          <span className="text-black font-normal">{item.action}</span>
+                        <li key={index} className="mb-2 flex items-start">
+                          <CheckCircle2 className="h-5 w-5 text-[#4285F4] mr-2 mt-0.5" />
+                          <span>
+                            <span className="font-semibold text-[#4285F4]">{item.category}:</span>{" "}
+                            <span className="text-black font-normal">{item.action}</span>
+                          </span>
                         </li>
                       ))}
                     </ul>

@@ -7,53 +7,211 @@ import * as cheerio from "cheerio"
 const cache: { [url: string]: { result: string; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
 
-async function fetchWebsiteContent(url: string) {
-  console.log(`Fetching content for URL: ${url}`)
-  try {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-      },
+async function fetchPage(url: string) {
+  console.log(`Fetching page: ${url}`)
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+      Connection: "keep-alive",
+      "Upgrade-Insecure-Requests": "1",
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return await response.text()
+}
+
+function findCartIcon($: cheerio.CheerioAPI): string | null {
+  // Common cart icon selectors
+  const cartSelectors = [
+    'a[href*="cart"]',
+    'a[href*="basket"]',
+    'a[href*="bag"]',
+    '[class*="cart"]',
+    '[class*="basket"]',
+    '[class*="bag"]',
+    '[aria-label*="cart" i]',
+    '[aria-label*="basket" i]',
+    '[aria-label*="bag" i]',
+    '[title*="cart" i]',
+    '[title*="basket" i]',
+    '[title*="bag" i]',
+  ]
+
+  for (const selector of cartSelectors) {
+    const element = $(selector).first()
+    if (element.length) {
+      return element.attr("href") || null
+    }
+  }
+  return null
+}
+
+function findCategoryLinks($: cheerio.CheerioAPI): string[] {
+  // Common category link selectors
+  const categorySelectors = [
+    'a[href*="/category"]',
+    'a[href*="/collection"]',
+    'a[href*="/department"]',
+    'a[href*="/shop"]',
+    '[class*="category-link"]',
+    '[class*="collection-link"]',
+    "nav a", // General navigation links
+    "#navigation a",
+    ".navigation a",
+    ".menu a",
+  ]
+
+  const links = new Set<string>()
+
+  categorySelectors.forEach((selector) => {
+    $(selector).each((_, el) => {
+      const href = $(el).attr("href")
+      if (href && !href.includes("javascript:") && !href.startsWith("#")) {
+        links.add(href)
+      }
     })
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+  })
+
+  return Array.from(links)
+}
+
+function findProductLinks($: cheerio.CheerioAPI): string[] {
+  // Common product link selectors
+  const productSelectors = [
+    'a[href*="/product"]',
+    'a[href*="/item"]',
+    '[class*="product-link"]',
+    '[class*="product-card"]',
+    '[class*="product-title"]',
+    ".product a",
+  ]
+
+  const links = new Set<string>()
+
+  productSelectors.forEach((selector) => {
+    $(selector).each((_, el) => {
+      const href = $(el).attr("href")
+      if (href && !href.includes("javascript:") && !href.startsWith("#")) {
+        links.add(href)
+      }
+    })
+  })
+
+  return Array.from(links)
+}
+
+function findAddToCartButton($: cheerio.CheerioAPI) {
+  // Common add to cart button selectors
+  const addToCartSelectors = [
+    'button[class*="add-to-cart"]',
+    'button[class*="add-to-bag"]',
+    'button[class*="add-to-basket"]',
+    'button:contains("Add to Cart")',
+    'button:contains("Add to Bag")',
+    'button:contains("Add to Basket")',
+    '[aria-label*="add to cart" i]',
+    '[aria-label*="add to bag" i]',
+    '[aria-label*="add to basket" i]',
+  ]
+
+  for (const selector of addToCartSelectors) {
+    const element = $(selector).first()
+    if (element.length) {
+      return {
+        text: element.text().trim(),
+        isProminent:
+          element.is('[class*="primary"], [class*="main"], [class*="prominent"]') ||
+          element.css("background-color") !== "transparent",
+      }
     }
-    const html = await response.text()
-    console.log(`Successfully fetched HTML content for ${url}`)
-    const $ = cheerio.load(html)
+  }
+  return null
+}
 
-    const data = {
-      title: $("title").text(),
-      description: $('meta[name="description"]').attr("content") || "",
-      h1Tags: $("h1")
-        .map((_, el) => $(el).text())
-        .get(),
-      links: $("a")
-        .map((_, el) => $(el).attr("href"))
+async function simulateUserFlow(baseUrl: string) {
+  console.log(`Simulating user flow for: ${baseUrl}`)
+  const data: any = {}
+
+  try {
+    // Step 1: Visit homepage
+    const homepageHtml = await fetchPage(baseUrl)
+    const $homepage = cheerio.load(homepageHtml)
+
+    data.homepage = {
+      title: $homepage("title").text(),
+      description: $homepage('meta[name="description"]').attr("content") || "",
+      h1Tags: $homepage("h1")
+        .map((_, el) => $homepage(el).text())
         .get(),
     }
 
-    // Fetch content from up to 3 product pages
-    const productLinks = data.links.filter((link) => link && (link.includes("/product") || link.includes("/item")))
-    for (let i = 0; i < Math.min(3, productLinks.length); i++) {
-      const productUrl = new URL(productLinks[i], url).href
-      const productResponse = await fetch(productUrl)
-      const productHtml = await productResponse.text()
-      const $product = cheerio.load(productHtml)
+    // Step 2: Find and visit a category page
+    const categoryLinks = findCategoryLinks($homepage)
+    console.log(`Found ${categoryLinks.length} category links`)
 
-      data[`product${i + 1}`] = {
-        title: $product("title").text(),
-        description: $product('meta[name="description"]').attr("content") || "",
-        price: $product('.price, [class*="price"]').first().text() || "N/A",
+    if (categoryLinks.length > 0) {
+      const categoryUrl = new URL(categoryLinks[0], baseUrl).href
+      const categoryHtml = await fetchPage(categoryUrl)
+      const $category = cheerio.load(categoryHtml)
+
+      data.category = {
+        url: categoryUrl,
+        title: $category("title").text(),
+        productCount: $category('[class*="product"]').length,
+      }
+
+      // Step 3: Find and visit a product page
+      const productLinks = findProductLinks($category)
+      console.log(`Found ${productLinks.length} product links`)
+
+      if (productLinks.length > 0) {
+        const productUrl = new URL(productLinks[0], baseUrl).href
+        const productHtml = await fetchPage(productUrl)
+        const $product = cheerio.load(productHtml)
+
+        const addToCartButton = findAddToCartButton($product)
+
+        data.product = {
+          url: productUrl,
+          title: $product("title").text(),
+          price: $product('[class*="price"]').first().text() || "N/A",
+          description:
+            $product('meta[name="description"]').attr("content") ||
+            $product('[class*="product-description"]').first().text() ||
+            "N/A",
+        }
+
+        if (addToCartButton) {
+          data.addToCart = addToCartButton
+        }
+
+        // Step 4: Try to find cart page
+        const cartUrl = findCartIcon($product)
+        if (cartUrl) {
+          const fullCartUrl = new URL(cartUrl, baseUrl).href
+          const cartHtml = await fetchPage(fullCartUrl)
+          const $cart = cheerio.load(cartHtml)
+
+          data.cart = {
+            url: fullCartUrl,
+            title: $cart("title").text(),
+            itemCount: $cart('[class*="cart-item"], [class*="bag-item"], [class*="basket-item"]').length,
+          }
+        }
       }
     }
 
-    console.log(`Processed website data for ${url}:`, data)
+    console.log("User flow simulation completed successfully")
     return data
   } catch (error) {
-    console.error(`Error fetching website content for ${url}:`, error)
-    throw error
+    console.error("Error during user flow simulation:", error)
+    // Return partial data if available
+    return data
   }
 }
 
@@ -68,19 +226,35 @@ export async function analyzeWebsite(url: string) {
       throw new Error("GOOGLE_API_KEY is not configured in environment variables")
     }
 
-    console.log(`Fetching website content for ${url}`)
-    const websiteData = await fetchWebsiteContent(url)
-    console.log(`Website data fetched successfully for ${url}`)
+    console.log(`Simulating user flow for ${url}`)
+    const websiteData = await simulateUserFlow(url)
+    console.log(`User flow simulation completed for ${url}`)
 
     const contentForAnalysis = `
 Website URL: ${url}
-Title: ${websiteData.title}
-Description: ${websiteData.description}
-Main Headings: ${websiteData.h1Tags.join(", ")}
-Number of Links: ${websiteData.links.length}
-Product 1: ${JSON.stringify(websiteData.product1)}
-Product 2: ${JSON.stringify(websiteData.product2)}
-Product 3: ${JSON.stringify(websiteData.product3)}
+Homepage Title: ${websiteData.homepage.title}
+Homepage Description: ${websiteData.homepage.description}
+Homepage H1 Tags: ${websiteData.homepage.h1Tags.join(", ")}
+
+Category Page:
+URL: ${websiteData.category?.url || "N/A"}
+Title: ${websiteData.category?.title || "N/A"}
+Product Count: ${websiteData.category?.productCount || "N/A"}
+
+Product Page:
+URL: ${websiteData.product?.url || "N/A"}
+Title: ${websiteData.product?.title || "N/A"}
+Price: ${websiteData.product?.price || "N/A"}
+Description: ${websiteData.product?.description || "N/A"}
+
+Add to Cart:
+Button Text: ${websiteData.addToCart?.buttonText || "N/A"}
+Is Prominent: ${websiteData.addToCart?.isProminent ? "Yes" : "No"}
+
+Cart Page:
+URL: ${websiteData.cart?.url || "N/A"}
+Title: ${websiteData.cart?.title || "N/A"}
+Item Count: ${websiteData.cart?.itemCount || "N/A"}
     `.trim()
 
     console.log(`Content prepared for analysis:`, contentForAnalysis)
