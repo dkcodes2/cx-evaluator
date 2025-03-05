@@ -1,7 +1,10 @@
 "use server"
 
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
 import * as cheerio from "cheerio"
+
+// Remove the import of URL from 'url'
+// import { URL } from "url"
 
 // Simple in-memory cache (Note: This will reset on server restart)
 const cache: { [url: string]: { result: string; timestamp: number } } = {}
@@ -32,48 +35,27 @@ function findNavigationElements($: cheerio.CheerioAPI): string[] {
 
   // Common navigation selectors
   const navigationSelectors = [
-    // Standard navigation elements
     "nav a",
     "header a",
     "#navigation a",
     ".navigation a",
     ".menu a",
     ".nav a",
-
-    // Common e-commerce navigation patterns
     '[class*="menu"] a',
     '[class*="nav"] a',
     '[role="navigation"] a',
     '[aria-label*="navigation" i] a',
     '[aria-label*="menu" i] a',
-
-    // Common category/department links
     'a[href*="/category"]',
     'a[href*="/c/"]',
     'a[href*="/department"]',
     'a[href*="/d/"]',
     'a[href*="/shop"]',
     'a[href*="/collection"]',
-
-    // Common menu item patterns
     ".menu-item a",
     ".nav-item a",
     '[class*="menu-item"] a',
     '[class*="nav-item"] a',
-
-    // Specific to major e-commerce platforms
-    "#nav-main a", // Amazon-like
-    "#main-menu a", // Common pattern
-    ".department-menu a", // Walmart-like
-    ".category-menu a", // Common pattern
-    '[data-nav-role="link"]', // Custom data attributes
-    '[data-nav-type="category"]', // Custom data attributes
-
-    // Mega menu patterns
-    ".mega-menu a",
-    '[class*="mega-menu"] a',
-    ".dropdown-menu a",
-    '[class*="dropdown"] a',
   ]
 
   navigationSelectors.forEach((selector) => {
@@ -82,27 +64,18 @@ function findNavigationElements($: cheerio.CheerioAPI): string[] {
       const href = $el.attr("href")
       const text = $el.text().trim()
 
-      // Skip if no href or if it's a non-navigation link
       if (
-        !href ||
-        href.startsWith("#") ||
-        href.startsWith("javascript:") ||
-        href.includes("login") ||
-        href.includes("signin") ||
-        href.includes("account") ||
-        href.includes("cart") ||
-        href.includes("checkout")
+        href &&
+        !href.startsWith("#") &&
+        !href.startsWith("javascript:") &&
+        !href.includes("login") &&
+        !href.includes("signin") &&
+        !href.includes("account") &&
+        !href.includes("cart") &&
+        !href.includes("checkout")
       ) {
-        return
+        links.add(href)
       }
-
-      // Skip common non-category links
-      const skipWords = ["about", "contact", "help", "faq", "support", "privacy", "terms"]
-      if (skipWords.some((word) => href.toLowerCase().includes(word) || text.toLowerCase().includes(word))) {
-        return
-      }
-
-      links.add(href)
     })
   })
 
@@ -114,46 +87,27 @@ function findProductElements($: cheerio.CheerioAPI): string[] {
 
   // Common product link patterns
   const productSelectors = [
-    // Standard product elements
     'a[href*="/product"]',
     'a[href*="/p/"]',
     'a[href*="/item"]',
     'a[href*="/i/"]',
-
-    // Common product card patterns
     '[class*="product-card"] a',
     '[class*="product-tile"] a',
     '[class*="product-item"] a',
     '[class*="productCard"] a',
     '[class*="productTile"] a',
-
-    // Product grid/list patterns
     ".products-grid a",
     ".product-list a",
     ".product-grid a",
     '[class*="product-grid"] a',
     '[class*="product-list"] a',
-
-    // Common e-commerce patterns
     "[data-product-id] a",
     "[data-item-id] a",
     '[class*="product"] a',
-
-    // Product title/name patterns
     ".product-title a",
     ".product-name a",
     '[class*="product-title"] a',
     '[class*="product-name"] a',
-
-    // Specific to major e-commerce platforms
-    "[data-asin] a", // Amazon-like
-    "[data-product] a", // Common pattern
-    "[data-sku] a", // Common pattern
-
-    // Product link patterns
-    'a[href*="dp/"]', // Amazon-like
-    'a[href*="prod"]', // Common pattern
-    'a[href*="sku"]', // Common pattern
   ]
 
   productSelectors.forEach((selector) => {
@@ -229,51 +183,32 @@ function findAddToCartButton($: cheerio.CheerioAPI) {
 function findCartIcon($: cheerio.CheerioAPI): string | null {
   // Common cart icon patterns
   const cartSelectors = [
-    // Standard cart links
     'a[href*="cart"]',
     'a[href*="basket"]',
     'a[href*="bag"]',
-
-    // Class patterns
     '[class*="cart"]',
     '[class*="basket"]',
     '[class*="bag"]',
     '[class*="shopping"]',
-
-    // ARIA patterns
     '[aria-label*="cart" i]',
     '[aria-label*="basket" i]',
     '[aria-label*="bag" i]',
     '[aria-label*="shopping" i]',
-
-    // Title patterns
     '[title*="cart" i]',
     '[title*="basket" i]',
     '[title*="bag" i]',
-
-    // Icon patterns
     '[class*="icon-cart"]',
     '[class*="cart-icon"]',
     '[class*="icon-basket"]',
     '[class*="basket-icon"]',
-
-    // Specific to major e-commerce platforms
-    "#nav-cart", // Amazon-like
-    "#mini-cart", // Common pattern
-    ".shopping-cart", // Common pattern
-
-    // Data attribute patterns
-    '[data-role="cart"]',
-    '[data-action="cart"]',
   ]
 
   for (const selector of cartSelectors) {
     const element = $(selector).first()
     if (element.length) {
-      // Try to find the closest anchor tag if the element itself is not an anchor
-      const anchor = element.is("a") ? element : element.closest("a")
-      if (anchor.length) {
-        return anchor.attr("href") || null
+      const href = element.attr("href") || element.parent("a").attr("href")
+      if (href) {
+        return href
       }
     }
   }
@@ -290,104 +225,103 @@ async function simulateUserFlow(baseUrl: string) {
     const $homepage = cheerio.load(homepageHtml)
 
     data.homepage = {
-      title: $homepage("title").text(),
+      title: $homepage("title").text().trim(),
       description: $homepage('meta[name="description"]').attr("content") || "",
       h1Tags: $homepage("h1")
-        .map((_, el) => $homepage(el).text())
+        .map((_, el) => $homepage(el).text().trim())
         .get(),
     }
 
-    // Step 2: Find navigation links and visit a category page
-    const navigationLinks = findNavigationElements($homepage)
-    console.log(`Found ${navigationLinks.length} navigation links`)
+    // Step 2: Explore multiple category pages
+    const categoryLinks = findNavigationElements($homepage)
+    console.log(`Found ${categoryLinks.length} category links`)
 
-    if (navigationLinks.length > 0) {
-      // Try each navigation link until we find one that works
-      for (const link of navigationLinks.slice(0, 5)) {
-        // Try first 5 links
-        try {
-          const categoryUrl = new URL(link, baseUrl).href
-          console.log(`Trying category URL: ${categoryUrl}`)
-          const categoryHtml = await fetchPage(categoryUrl)
-          const $category = cheerio.load(categoryHtml)
+    data.categories = []
 
-          // Check if this page has product elements
-          const productElements = $category('[class*="product"], [data-product], [data-asin]')
-          if (productElements.length > 0) {
-            data.category = {
-              url: categoryUrl,
-              title: $category("title").text(),
-              productCount: productElements.length,
-            }
-            break
-          }
-        } catch (error) {
-          console.log(`Failed to process category link ${link}:`, error)
-          continue
+    for (const link of categoryLinks.slice(0, 5)) {
+      // Explore up to 5 category pages
+      try {
+        const categoryUrl = new URL(link, baseUrl).href
+        console.log(`Exploring category: ${categoryUrl}`)
+        const categoryHtml = await fetchPage(categoryUrl)
+        const $category = cheerio.load(categoryHtml)
+
+        const categoryData = {
+          url: categoryUrl,
+          title: $category("title").text().trim(),
+          productCount: findProductElements($category).length,
+          description: $category('meta[name="description"]').attr("content") || "",
         }
+
+        data.categories.push(categoryData)
+        console.log(`Category explored: ${categoryData.url}`)
+      } catch (error) {
+        console.log(`Failed to process category link ${link}:`, error)
       }
     }
 
-    // Step 3: Find and visit a product page
-    if (data.category) {
-      const $category = cheerio.load(await fetchPage(data.category.url))
-      const productLinks = findProductElements($category)
-      console.log(`Found ${productLinks.length} product links`)
+    // Step 3: Explore multiple product pages
+    data.products = []
 
-      if (productLinks.length > 0) {
-        // Try each product link until we find one that works
-        for (const link of productLinks.slice(0, 5)) {
-          // Try first 5 links
-          try {
-            const productUrl = new URL(link, baseUrl).href
-            console.log(`Trying product URL: ${productUrl}`)
-            const productHtml = await fetchPage(productUrl)
-            const $product = cheerio.load(productHtml)
+    const productLinks = findProductElements($homepage)
+    for (const link of productLinks.slice(0, 3)) {
+      // Explore up to 3 products
+      try {
+        const productUrl = new URL(link, baseUrl).href
+        console.log(`Exploring product: ${productUrl}`)
+        const productHtml = await fetchPage(productUrl)
+        const $product = cheerio.load(productHtml)
 
-            const addToCartButton = findAddToCartButton($product)
-            const price = $product('[class*="price"], [data-price], .price').first().text()
-
-            if (price || addToCartButton) {
-              data.product = {
-                url: productUrl,
-                title: $product("title").text(),
-                price: price || "N/A",
-                description:
-                  $product('meta[name="description"]').attr("content") ||
-                  $product('[class*="product-description"], [class*="description"]').first().text() ||
-                  "N/A",
-              }
-
-              if (addToCartButton) {
-                data.addToCart = addToCartButton
-              }
-              break
-            }
-          } catch (error) {
-            console.log(`Failed to process product link ${link}:`, error)
-            continue
-          }
+        const productData = {
+          url: productUrl,
+          title: $product("title").text().trim(),
+          price: $product('[itemprop="price"], .price, [class*="price"]').first().text().trim() || "N/A",
+          description:
+            $product('[itemprop="description"], .description, [class*="description"]').first().text().trim() || "N/A",
         }
+
+        data.products.push(productData)
+        console.log(`Product explored: ${productData.url}`)
+      } catch (error) {
+        console.log(`Failed to process product link ${link}:`, error)
       }
     }
 
-    // Step 4: Try to find cart page
-    const cartUrl = findCartIcon($homepage) // Try finding cart from homepage first
+    // Step 4: Explore cart and checkout process
+    const cartUrl = findCartIcon($homepage)
     if (cartUrl) {
       try {
         const fullCartUrl = new URL(cartUrl, baseUrl).href
-        console.log(`Found cart URL: ${fullCartUrl}`)
+        console.log(`Exploring cart: ${fullCartUrl}`)
         const cartHtml = await fetchPage(fullCartUrl)
         const $cart = cheerio.load(cartHtml)
 
         data.cart = {
           url: fullCartUrl,
-          title: $cart("title").text(),
-          itemCount: $cart('[class*="cart-item"], [class*="bag-item"], [class*="basket-item"], [data-cart-item]')
-            .length,
+          title: $cart("title").text().trim(),
+          itemCount: $cart('[class*="cart-item"], [class*="cart_item"]').length,
+        }
+        console.log(`Cart explored: ${data.cart.url}`)
+
+        // Try to find checkout button
+        const checkoutButton = $cart('a[href*="checkout"], button[class*="checkout"]').first()
+        if (checkoutButton.length) {
+          const checkoutUrl = new URL(checkoutButton.attr("href") || "", baseUrl).href
+          console.log(`Exploring checkout: ${checkoutUrl}`)
+          const checkoutHtml = await fetchPage(checkoutUrl)
+          const $checkout = cheerio.load(checkoutHtml)
+
+          data.checkout = {
+            url: checkoutUrl,
+            title: $checkout("title").text().trim(),
+            steps: $checkout('[class*="checkout-step"], [class*="step"]')
+              .map((_, el) => $checkout(el).text().trim())
+              .get(),
+          }
+          console.log(`Checkout explored: ${data.checkout.url}`)
         }
       } catch (error) {
-        console.log("Failed to process cart page:", error)
+        console.log("Failed to process cart or checkout:", error)
       }
     }
 
@@ -395,7 +329,6 @@ async function simulateUserFlow(baseUrl: string) {
     return data
   } catch (error) {
     console.error("Error during user flow simulation:", error)
-    // Return partial data if available
     return data
   }
 }
@@ -407,8 +340,16 @@ export async function analyzeWebsite(url: string) {
       return cache[url].result
     }
 
-    if (!process.env.GOOGLE_API_KEY) {
-      throw new Error("GOOGLE_API_KEY is not configured in environment variables")
+    const apiKey = process.env.GOOGLE_API_KEY
+
+    if (!apiKey) {
+      console.error("GOOGLE_API_KEY is not configured in environment variables")
+      return JSON.stringify({
+        error: "API_KEY_MISSING",
+        message: "GOOGLE_API_KEY is not configured in environment variables",
+        details:
+          "Please set the GOOGLE_API_KEY environment variable in your Vercel project settings or .env.local file.",
+      })
     }
 
     console.log(`Simulating user flow for ${url}`)
@@ -421,31 +362,71 @@ Homepage Title: ${websiteData.homepage.title}
 Homepage Description: ${websiteData.homepage.description}
 Homepage H1 Tags: ${websiteData.homepage.h1Tags.join(", ")}
 
-Category Page:
-URL: ${websiteData.category?.url || "N/A"}
-Title: ${websiteData.category?.title || "N/A"}
-Product Count: ${websiteData.category?.productCount || "N/A"}
+Categories:
+${websiteData.categories
+  .map(
+    (category: { url: any; title: any; productCount: any; description: any; }) => `
+  URL: ${category.url}
+  Title: ${category.title}
+  Product Count: ${category.productCount}
+  Description: ${category.description}
+`,
+  )
+  .join("")}
 
-Product Page:
-URL: ${websiteData.product?.url || "N/A"}
-Title: ${websiteData.product?.title || "N/A"}
-Price: ${websiteData.product?.price || "N/A"}
-Description: ${websiteData.product?.description || "N/A"}
-
-Add to Cart:
-Button Text: ${websiteData.addToCart?.text || "N/A"}
-Is Prominent: ${websiteData.addToCart?.isProminent ? "Yes" : "No"}
+Products:
+${websiteData.products
+  .map(
+    (product: { url: any; title: any; price: any; description: any; }) => `
+  URL: ${product.url}
+  Title: ${product.title}
+  Price: ${product.price}
+  Description: ${product.description}
+`,
+  )
+  .join("")}
 
 Cart Page:
 URL: ${websiteData.cart?.url || "N/A"}
 Title: ${websiteData.cart?.title || "N/A"}
 Item Count: ${websiteData.cart?.itemCount || "N/A"}
-    `.trim()
+
+Checkout Page:
+URL: ${websiteData.checkout?.url || "N/A"}
+Title: ${websiteData.checkout?.title || "N/A"}
+Steps: ${websiteData.checkout?.steps.join(", ") || "N/A"}
+`.trim()
 
     console.log(`Content prepared for analysis:`, contentForAnalysis)
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" })
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-thinking-exp-01-21" })
+
+    const generationConfig = {
+      temperature: 0.9,
+      topK: 1,
+      topP: 1,
+      maxOutputTokens: 4096, // Increased from 2048 to 4096
+    }
+
+    const safetySettings = [
+      {
+        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+      },
+      {
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+      },
+    ]
 
     // First, check if the website is an e-commerce site
     const ecommerceCheckPrompt = `
@@ -455,9 +436,16 @@ Respond with only "YES" if it is an e-commerce website, or "NO" if it is not.
 ${contentForAnalysis}
 `
 
-    const ecommerceCheckResult = await model.generateContent(ecommerceCheckPrompt)
+    console.log("Sending e-commerce check prompt to Gemini API")
+    const ecommerceCheckResult = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: ecommerceCheckPrompt }] }],
+      generationConfig,
+      safetySettings,
+    })
+
     const ecommerceCheckResponse = await ecommerceCheckResult.response
     const isEcommerce = ecommerceCheckResponse.text().trim().toUpperCase() === "YES"
+    console.log(`E-commerce check result: ${isEcommerce ? "Yes" : "No"}`)
 
     if (!isEcommerce) {
       return JSON.stringify({ isEcommerce: false, message: "This website does not appear to be an e-commerce site." })
@@ -520,9 +508,17 @@ Specific Actionable Items:
 • Value Proposition: [Detailed, specific action item]
 • Call to Action: [Detailed, specific action item]
 • Additional Recommendation: [Detailed, specific action item]
+
+Ensure that all sections, including the Specific Actionable Items, are fully completed in your response.
 `
 
-    const result = await model.generateContent(prompt)
+    console.log("Sending main analysis prompt to Gemini API")
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig,
+      safetySettings,
+    })
+
     const response = await result.response
     const text = response.text()
 
@@ -530,6 +526,7 @@ Specific Actionable Items:
       throw new Error("Failed to generate analysis")
     }
 
+    console.log("Analysis generated successfully")
     const finalResult = JSON.stringify({ isEcommerce: true, analysis: text })
 
     // Cache the result
@@ -540,14 +537,15 @@ Specific Actionable Items:
     console.error("Error analyzing website:", error)
     if (error instanceof Error) {
       return JSON.stringify({
-        error: `An error occurred while analyzing the website: ${error.message}`,
+        error: "ANALYSIS_ERROR",
+        message: `An error occurred while analyzing the website: ${error.message}`,
         details: error.stack,
       })
     }
     return JSON.stringify({
-      error: "An unexpected error occurred while analyzing the website.",
+      error: "UNKNOWN_ERROR",
+      message: "An unexpected error occurred while analyzing the website.",
       details: String(error),
     })
   }
 }
-

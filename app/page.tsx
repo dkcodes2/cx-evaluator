@@ -74,7 +74,7 @@ export default function Home() {
       console.log("Parsed result:", result)
 
       if (result.error) {
-        setError(`${result.error}\n\nDetails: ${result.details || "No additional details available"}`)
+        setError(`${result.message}\n\nDetails: ${result.details || "No additional details available"}`)
       } else if (!result.isEcommerce) {
         setError(result.message)
       } else if (!result.analysis) {
@@ -86,33 +86,44 @@ export default function Home() {
         // More robust component parsing
         componentNames.forEach((name) => {
           try {
-            const componentMatch = analysis.match(
-              new RegExp(
-                `${name}:\\s*(\\d+)/100\\s*\\nRationale:\\s*([\\s\\S]*?)(?=\\n(?:Strengths:|${componentNames.join("|")}:))`,
-              ),
+            const componentRegex = new RegExp(
+              `${name}:\\s*(\\d+)/100\\s*(?:Rationale:)?\\s*([\\s\\S]*?)(?=\\n(?:${componentNames.join("|")}|Detailed Summary|$))`,
+              "i",
             )
-            const strengthsMatch = analysis.match(new RegExp(`${name}:[\\s\\S]*?Strengths:\\n((?:•[^\\n]*\\n){1,3})`))
-            const weaknessesMatch = analysis.match(new RegExp(`${name}:[\\s\\S]*?Weaknesses:\\n((?:•[^\\n]*\\n){1,3})`))
+            const componentMatch = analysis.match(componentRegex)
 
             if (componentMatch) {
+              const [, score, content] = componentMatch
+              const rationaleRegex = /Rationale:\s*([\s\S]*?)(?=\nStrengths:|\nWeaknesses:|\n\n|$)/i
+              const strengthsRegex = /Strengths:\s*((?:•[^\n]*\n*)+)/i
+              const weaknessesRegex = /Weaknesses:\s*((?:•[^\n]*\n*)+)/i
+
+              const rationaleMatch = content.match(rationaleRegex)
+              const strengthsMatch = content.match(strengthsRegex)
+              const weaknessesMatch = content.match(weaknessesRegex)
+
+              const rationale = rationaleMatch ? rationaleMatch[1].trim() : ""
+              const strengths = strengthsMatch
+                ? strengthsMatch[1]
+                    .split("\n")
+                    .map((s: string) => s.trim())
+                    .filter((s: string) => s.startsWith("•"))
+                    .map((s: string) => s.substring(1).trim())
+                : []
+              const weaknesses = weaknessesMatch
+                ? weaknessesMatch[1]
+                    .split("\n")
+                    .map((s: string) => s.trim())
+                    .filter((s: string) => s.startsWith("•"))
+                    .map((s: string) => s.substring(1).trim())
+                : []
+
               componentResults.push({
                 name,
-                score: Number.parseInt(componentMatch[1]),
-                rationale: componentMatch[2].trim(),
-                strengths: strengthsMatch
-                  ? strengthsMatch[1]
-                      .split("\n")
-                      .map((s: string) => s.trim())
-                      .filter((s: string) => s.startsWith("•"))
-                      .map((s: string) => s.substring(1).trim())
-                  : [],
-                weaknesses: weaknessesMatch
-                  ? weaknessesMatch[1]
-                      .split("\n")
-                      .map((s: string) => s.trim())
-                      .filter((s: string) => s.startsWith("•"))
-                      .map((s: string) => s.substring(1).trim())
-                  : [],
+                score: Number.parseInt(score),
+                rationale,
+                strengths,
+                weaknesses,
               })
             } else {
               console.warn(`Failed to parse component: ${name}`)
@@ -137,12 +148,14 @@ export default function Home() {
           }
 
           try {
-            const summaryMatch = analysis.match(/Detailed Summary:\n([\s\S]*?)(?=\n\nSpecific Actionable Items:|\s*$)/)
+            const summaryMatch = analysis.match(
+              /Detailed Summary:\s*([\s\S]*?)(?=\n\nSpecific Actionable Items:|\s*$)/i,
+            )
             if (summaryMatch) {
               setSummary(summaryMatch[1].trim())
             }
 
-            const actionableItemsMatch = analysis.match(/Specific Actionable Items:\n([\s\S]*?)$/)
+            const actionableItemsMatch = analysis.match(/Specific Actionable Items:\s*([\s\S]*?)$/i)
             if (actionableItemsMatch) {
               const items = actionableItemsMatch[1]
                 .split("\n")
@@ -169,7 +182,7 @@ export default function Home() {
     } catch (error) {
       console.error("Error during analysis:", error)
       setError(
-        `An unexpected error occurred while analyzing the website: ${error instanceof Error ? error.message : String(error)}`,
+        `An unexpected error occurred while analyzing the website. Please try again later or contact support if the issue persists.`,
       )
     } finally {
       setIsLoading(false)
@@ -318,3 +331,4 @@ export default function Home() {
     </div>
   )
 }
+
