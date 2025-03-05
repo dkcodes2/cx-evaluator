@@ -3,9 +3,6 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
 import * as cheerio from "cheerio"
 
-// Remove the import of URL from 'url'
-// import { URL } from "url"
-
 // Simple in-memory cache (Note: This will reset on server restart)
 const cache: { [url: string]: { result: string; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
@@ -334,6 +331,7 @@ async function simulateUserFlow(baseUrl: string) {
 }
 
 export async function analyzeWebsite(url: string) {
+  console.log(`Starting analysis for URL: ${url}`)
   try {
     // Check cache first
     if (cache[url] && Date.now() - cache[url].timestamp < CACHE_DURATION) {
@@ -532,9 +530,11 @@ Ensure that all sections, including the Specific Actionable Items, are fully com
     // Cache the result
     cache[url] = { result: finalResult, timestamp: Date.now() }
 
+    console.log(`Analysis completed for URL: ${url}`)
+    console.log(`Final result:`, finalResult)
     return finalResult
   } catch (error) {
-    console.error("Error analyzing website:", error)
+    console.error(`Error analyzing website ${url}:`, error)
     if (error instanceof Error) {
       return JSON.stringify({
         error: "ANALYSIS_ERROR",
@@ -549,3 +549,4 @@ Ensure that all sections, including the Specific Actionable Items, are fully com
     })
   }
 }
+
