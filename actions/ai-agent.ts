@@ -3,6 +3,9 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
 import * as cheerio from "cheerio"
 
+// Remove the import of URL from 'url'
+// import { URL } from "url"
+
 // Simple in-memory cache (Note: This will reset on server restart)
 const cache: { [url: string]: { result: string; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour

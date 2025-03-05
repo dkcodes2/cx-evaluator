@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { analyzeWebsite } from "../actions/ai-agent"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,35 +33,43 @@ const componentNames = [
 ]
 
 export default function Home() {
-  // Update the state to handle two URLs and their respective analysis results
   const [urls, setUrls] = useState<string[]>(["", ""])
   const [activeUrlCount, setActiveUrlCount] = useState(1)
-  const [overallScores, setOverallScores] = useState<number[]>([0, 0])
-  const [componentsArray, setComponentsArray] = useState<AnalysisComponent[][]>([[], []])
-  const [summaries, setSummaries] = useState<string[]>(["", ""])
-  const [actionableItemsArray, setActionableItemsArray] = useState<ActionableItem[][]>([[], []])
-  const [errors, setErrors] = useState<string[]>(["", ""])
+  const [overallScores, setOverallScores] = useState<number[]>([])
+  const [componentsArray, setComponentsArray] = useState<AnalysisComponent[][]>([])
+  const [summaries, setSummaries] = useState<string[]>([])
+  const [actionableItemsArray, setActionableItemsArray] = useState<ActionableItem[][]>([])
+  const [errors, setErrors] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [analysisAttempts, setAnalysisAttempts] = useState(0)
-  const [partialResults, setPartialResults] = useState([false, false])
+  const [partialResults, setPartialResults] = useState<boolean[]>([])
 
-  // Replace the existing handleAnalysis function with this updated version
+  useEffect(() => {
+    console.log("State updated:", {
+      overallScores,
+      componentsArray,
+      summaries,
+      actionableItemsArray,
+      errors,
+      partialResults,
+    })
+  }, [overallScores, componentsArray, summaries, actionableItemsArray, errors, partialResults])
+
   const handleAnalysis = async () => {
-    // Validate URLs
     const urlsToAnalyze = urls.slice(0, activeUrlCount).filter((url) => url.trim() !== "")
 
     if (urlsToAnalyze.length === 0) {
-      setErrors(["Please enter at least one website URL", ""])
+      setErrors(["Please enter at least one website URL"])
       return
     }
 
     setIsLoading(true)
-    setErrors(["", ""])
-    setOverallScores([0, 0])
-    setComponentsArray([[], []])
-    setSummaries(["", ""])
-    setActionableItemsArray([[], []])
-    setPartialResults([false, false])
+    setErrors([])
+    setOverallScores(new Array(activeUrlCount).fill(null))
+    setComponentsArray(new Array(activeUrlCount).fill([]))
+    setSummaries(new Array(activeUrlCount).fill(""))
+    setActionableItemsArray(new Array(activeUrlCount).fill([]))
+    setPartialResults(new Array(activeUrlCount).fill(false))
 
     try {
       console.log("Starting analysis for URLs:", urlsToAnalyze)
@@ -74,38 +82,44 @@ export default function Home() {
         }),
       )
 
-      // Process each result
       results.forEach(({ url, resultString }, index) => {
         let result
         try {
           result = JSON.parse(resultString)
         } catch (parseError) {
           console.error(`Error parsing result for ${url}:`, parseError)
-          const newErrors = [...errors]
-          newErrors[index] = "Failed to parse analysis results. Please try again."
-          setErrors(newErrors)
+          setErrors((prev) => {
+            const newErrors = [...prev]
+            newErrors[index] = "Failed to parse analysis results. Please try again."
+            return newErrors
+          })
           return
         }
 
         console.log(`Parsed result for URL ${index + 1}:`, result)
 
         if (result.error) {
-          const newErrors = [...errors]
-          newErrors[index] = `${result.message}\n\nDetails: ${result.details || "No additional details available"}`
-          setErrors(newErrors)
+          setErrors((prev) => {
+            const newErrors = [...prev]
+            newErrors[index] = `${result.message}\n\nDetails: ${result.details || "No additional details available"}`
+            return newErrors
+          })
         } else if (!result.isEcommerce) {
-          const newErrors = [...errors]
-          newErrors[index] = result.message
-          setErrors(newErrors)
+          setErrors((prev) => {
+            const newErrors = [...prev]
+            newErrors[index] = result.message
+            return newErrors
+          })
         } else if (!result.analysis) {
-          const newErrors = [...errors]
-          newErrors[index] = "No analysis data received. Please try again."
-          setErrors(newErrors)
+          setErrors((prev) => {
+            const newErrors = [...prev]
+            newErrors[index] = "No analysis data received. Please try again."
+            return newErrors
+          })
         } else {
           const analysis = result.analysis
           const componentResults: AnalysisComponent[] = []
 
-          // More robust component parsing
           componentNames.forEach((name) => {
             try {
               const componentRegex = new RegExp(
@@ -156,29 +170,33 @@ export default function Home() {
           })
 
           if (componentResults.length === 0) {
-            const newErrors = [...errors]
-            newErrors[index] = "Unable to parse any analysis results. Please try again."
-            setErrors(newErrors)
+            setErrors((prev) => {
+              const newErrors = [...prev]
+              newErrors[index] = "Unable to parse any analysis results. Please try again."
+              return newErrors
+            })
           } else {
-            // Update components for this URL
-            const newComponentsArray = [...componentsArray]
-            newComponentsArray[index] = componentResults
-            setComponentsArray(newComponentsArray)
+            setComponentsArray((prev) => {
+              const newComponentsArray = [...prev]
+              newComponentsArray[index] = componentResults
+              return newComponentsArray
+            })
 
-            // Calculate the overall score as the average of component scores
             const totalScore = componentResults.reduce((sum, component) => sum + component.score, 0)
             const calculatedOverallScore = Math.round(totalScore / componentResults.length)
 
-            // Update overall scores
-            const newOverallScores = [...overallScores]
-            newOverallScores[index] = calculatedOverallScore
-            setOverallScores(newOverallScores)
+            setOverallScores((prev) => {
+              const newOverallScores = [...prev]
+              newOverallScores[index] = calculatedOverallScore
+              return newOverallScores
+            })
 
-            // Check if we have partial results
             if (componentResults.length < componentNames.length) {
-              const newPartialResults = [...partialResults]
-              newPartialResults[index] = true
-              setPartialResults(newPartialResults)
+              setPartialResults((prev) => {
+                const newPartialResults = [...prev]
+                newPartialResults[index] = true
+                return newPartialResults
+              })
             }
 
             try {
@@ -186,9 +204,11 @@ export default function Home() {
                 /Detailed Summary:\s*([\s\S]*?)(?=\n\nSpecific Actionable Items:|\s*$)/i,
               )
               if (summaryMatch) {
-                const newSummaries = [...summaries]
-                newSummaries[index] = summaryMatch[1].trim()
-                setSummaries(newSummaries)
+                setSummaries((prev) => {
+                  const newSummaries = [...prev]
+                  newSummaries[index] = summaryMatch[1].trim()
+                  return newSummaries
+                })
               }
 
               const actionableItemsMatch = analysis.match(/Specific Actionable Items:\s*([\s\S]*?)$/i)
@@ -209,9 +229,11 @@ export default function Home() {
                   })
                   .filter((item: { category: any; action: any }) => item.category && item.action)
 
-                const newActionableItemsArray = [...actionableItemsArray]
-                newActionableItemsArray[index] = items
-                setActionableItemsArray(newActionableItemsArray)
+                setActionableItemsArray((prev) => {
+                  const newActionableItemsArray = [...prev]
+                  newActionableItemsArray[index] = items
+                  return newActionableItemsArray
+                })
               }
             } catch (parseError) {
               console.error("Error parsing summary or actionable items:", parseError)
@@ -220,7 +242,7 @@ export default function Home() {
         }
       })
 
-      console.log("Analysis completed. State updated:", {
+      console.log("Analysis completed. Final state:", {
         overallScores,
         componentsArray,
         summaries,
@@ -232,22 +254,12 @@ export default function Home() {
       console.error("Error during analysis:", error)
       setErrors([
         "An unexpected error occurred while analyzing the website(s). Please try again later or contact support if the issue persists.",
-        "",
       ])
     } finally {
       setIsLoading(false)
+      setAnalysisAttempts((prev) => prev + 1)
     }
   }
-
-  console.log("Rendering component with state:", {
-    activeUrlCount,
-    overallScores,
-    componentsArray,
-    summaries,
-    actionableItemsArray,
-    errors,
-    partialResults,
-  })
 
   return (
     <div className="min-h-screen bg-[#e8f0fe]">
@@ -305,10 +317,7 @@ export default function Home() {
                   )}
                 </div>
                 <Button
-                  onClick={() => {
-                    setAnalysisAttempts((prev) => prev + 1)
-                    handleAnalysis()
-                  }}
+                  onClick={handleAnalysis}
                   disabled={isLoading}
                   className="w-full bg-[#4285F4] hover:bg-[#3367D6] text-white"
                 >
@@ -344,16 +353,6 @@ export default function Home() {
               </Alert>
             )}
 
-            {isLoading && activeUrlCount === 2 && (
-              <Alert className="mt-2">
-                <Info className="h-4 w-4" />
-                <AlertTitle>Preparing Comparison</AlertTitle>
-                <AlertDescription>
-                  Once both websites are analyzed, a side-by-side comparison will automatically appear here.
-                </AlertDescription>
-              </Alert>
-            )}
-
             {partialResults.some((partial) => partial) && (
               <Alert className="mt-4">
                 <Info className="h-4 w-4" />
@@ -364,11 +363,11 @@ export default function Home() {
               </Alert>
             )}
 
-            {activeUrlCount === 1 && componentsArray[0].length > 0 && (
+            {activeUrlCount === 1 && componentsArray[0]?.length > 0 && (
               <div className="mt-6 space-y-6">
                 <div className="text-center">
                   <h2 className="text-3xl font-bold text-[#4285F4]">Overall Score</h2>
-                  <p className="text-5xl font-bold text-[#4285F4] mt-2">{overallScores[0]}</p>
+                  <p className="text-5xl font-bold text-[#4285F4] mt-2">{overallScores[0] ?? "N/A"}</p>
                 </div>
 
                 <Accordion type="multiple" className="w-full">
@@ -425,7 +424,7 @@ export default function Home() {
                   </div>
                 )}
 
-                {actionableItemsArray[0].length > 0 && (
+                {actionableItemsArray[0]?.length > 0 && (
                   <div className="mt-6">
                     <h2 className="text-xl font-bold mb-2 text-[#4285F4]">Specific Actionable Items</h2>
                     <ul className="bg-white p-4 rounded-lg text-black border border-[#e8f0fe] space-y-2">
@@ -444,18 +443,18 @@ export default function Home() {
               </div>
             )}
 
-            {activeUrlCount === 2 && componentsArray[0].length > 0 && componentsArray[1].length > 0 && (
+            {activeUrlCount === 2 && (componentsArray[0]?.length > 0 || componentsArray[1]?.length > 0) && (
               <div className="mt-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Overall Scores Comparison */}
                   <div className="text-center">
                     <h2 className="text-2xl font-bold text-[#4285F4]">Website 1 Score</h2>
-                    <p className="text-4xl font-bold text-[#4285F4] mt-2">{overallScores[0]}</p>
+                    <p className="text-4xl font-bold text-[#4285F4] mt-2">{overallScores[0] ?? "N/A"}</p>
                     <p className="text-sm text-gray-500 mt-1">{urls[0]}</p>
                   </div>
                   <div className="text-center">
                     <h2 className="text-2xl font-bold text-[#4285F4]">Website 2 Score</h2>
-                    <p className="text-4xl font-bold text-[#4285F4] mt-2">{overallScores[1]}</p>
+                    <p className="text-4xl font-bold text-[#4285F4] mt-2">{overallScores[1] ?? "N/A"}</p>
                     <p className="text-sm text-gray-500 mt-1">{urls[1]}</p>
                   </div>
                 </div>
@@ -474,21 +473,29 @@ export default function Home() {
                     </thead>
                     <tbody>
                       {componentNames.map((name) => {
-                        const comp1 = componentsArray[0].find((c) => c.name === name)
-                        const comp2 = componentsArray[1].find((c) => c.name === name)
-                        const score1 = comp1 ? comp1.score : 0
-                        const score2 = comp2 ? comp2.score : 0
-                        const diff = score1 - score2
+                        const comp1 = componentsArray[0]?.find((c) => c.name === name)
+                        const comp2 = componentsArray[1]?.find((c) => c.name === name)
+                        const score1 = comp1?.score
+                        const score2 = comp2?.score
+                        const diff = score1 !== undefined && score2 !== undefined ? score1 - score2 : null
 
                         return (
                           <tr key={name} className="border-b border-gray-200">
                             <td className="p-3 font-medium">{name}</td>
-                            <td className="p-3 text-center">{comp1 ? comp1.score : "N/A"}</td>
-                            <td className="p-3 text-center">{comp2 ? comp2.score : "N/A"}</td>
+                            <td className="p-3 text-center">{score1 ?? "N/A"}</td>
+                            <td className="p-3 text-center">{score2 ?? "N/A"}</td>
                             <td
-                              className={`p-3 text-center font-bold ${diff > 0 ? "text-green-600" : diff < 0 ? "text-red-600" : "text-gray-500"}`}
+                              className={`p-3 text-center font-bold ${
+                                diff !== null
+                                  ? diff > 0
+                                    ? "text-green-600"
+                                    : diff < 0
+                                      ? "text-red-600"
+                                      : "text-gray-500"
+                                  : ""
+                              }`}
                             >
-                              {comp1 && comp2 ? (diff > 0 ? "+" : "") + diff : "N/A"}
+                              {diff !== null ? (diff > 0 ? "+" : "") + diff : "N/A"}
                             </td>
                           </tr>
                         )
@@ -501,8 +508,8 @@ export default function Home() {
                 <h2 className="text-2xl font-bold text-[#4285F4] mt-8 mb-4">Detailed Component Analysis</h2>
                 <Accordion type="multiple" className="w-full">
                   {componentNames.map((name, idx) => {
-                    const comp1 = componentsArray[0].find((c) => c.name === name)
-                    const comp2 = componentsArray[1].find((c) => c.name === name)
+                    const comp1 = componentsArray[0]?.find((c) => c.name === name)
+                    const comp2 = componentsArray[1]?.find((c) => c.name === name)
 
                     return (
                       <AccordionItem key={name} value={`comp-${idx}`}>
@@ -510,8 +517,8 @@ export default function Home() {
                           <div className="flex justify-between items-center w-full">
                             <h3 className="text-lg font-semibold text-[#4285F4]">{name}</h3>
                             <div className="flex space-x-4">
-                              <span className="font-bold text-[#4285F4]">Site 1: {comp1 ? comp1.score : "N/A"}</span>
-                              <span className="font-bold text-[#4285F4]">Site 2: {comp2 ? comp2.score : "N/A"}</span>
+                              <span className="font-bold text-[#4285F4]">Site 1: {comp1?.score ?? "N/A"}</span>
+                              <span className="font-bold text-[#4285F4]">Site 2: {comp2?.score ?? "N/A"}</span>
                             </div>
                           </div>
                         </AccordionTrigger>
@@ -627,13 +634,13 @@ export default function Home() {
                 )}
 
                 {/* Actionable Items Comparison */}
-                {(actionableItemsArray[0].length > 0 || actionableItemsArray[1].length > 0) && (
+                {(actionableItemsArray[0]?.length > 0 || actionableItemsArray[1]?.length > 0) && (
                   <div className="mt-6">
                     <h2 className="text-2xl font-bold mb-4 text-[#4285F4]">Specific Actionable Items</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="bg-white p-4 rounded-lg text-black border border-[#e8f0fe]">
                         <h3 className="font-bold text-[#4285F4] mb-2">Website 1</h3>
-                        {actionableItemsArray[0].length > 0 ? (
+                        {actionableItemsArray[0]?.length > 0 ? (
                           <ul className="space-y-2">
                             {actionableItemsArray[0].map((item, index) => (
                               <li key={index} className="mb-2 flex items-start">
@@ -651,7 +658,7 @@ export default function Home() {
                       </div>
                       <div className="bg-white p-4 rounded-lg text-black border border-[#e8f0fe]">
                         <h3 className="font-bold text-[#4285F4] mb-2">Website 2</h3>
-                        {actionableItemsArray[1].length > 0 ? (
+                        {actionableItemsArray[1]?.length > 0 ? (
                           <ul className="space-y-2">
                             {actionableItemsArray[1].map((item, index) => (
                               <li key={index} className="mb-2 flex items-start">
@@ -678,4 +685,3 @@ export default function Home() {
     </div>
   )
 }
-
