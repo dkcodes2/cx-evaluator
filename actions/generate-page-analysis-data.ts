@@ -138,27 +138,8 @@ function parseAnalysisText(text: string, baseUrl: string): PageAnalysis[] {
     }
   })
 
-  // If we didn't find all page types, generate placeholders for the missing ones
-  pageTypes.forEach((pageType) => {
-    if (!analyses.some((a) => a.pageType === pageType)) {
-      analyses.push({
-        pageUrl: baseUrl + (pageType === "Homepage" ? "" : "/" + pageType.toLowerCase().replace(" ", "-")),
-        pageType,
-        score: 0,
-        scoreReasoning: "No data available for this page type",
-        strengths: ["No data available"],
-        weaknesses: ["No data available"],
-        recommendations: [
-          {
-            suggestion: "No recommendations available",
-            reasoning: "",
-            referenceWebsite: { name: "", url: "", description: "" },
-          },
-        ],
-      })
-    }
-  })
-
+  // Only include page types that were actually found in the analysis
+  // We won't generate placeholders for missing page types
   return analyses
 }
 
