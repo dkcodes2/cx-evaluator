@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { analyzeWebsite } from "../actions/ai-agent"
+import { generatePageAnalysisData } from "../actions/generate-page-analysis-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +10,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, CheckCircle2, Info } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { PageAnalysis } from "@/components/page-analysis"
+import { CircularProgress } from "@/components/ui/circular-progress"
 
 interface AnalysisComponent {
   name: string
@@ -43,6 +46,29 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [analysisAttempts, setAnalysisAttempts] = useState(0)
   const [partialResults, setPartialResults] = useState<boolean[]>([])
+  const [pageAnalysisData, setPageAnalysisData] = useState<any[]>([])
+  const [isLoadingPageAnalysis, setIsLoadingPageAnalysis] = useState(false)
+
+  const getScoreColorClass = (score: number | null) => {
+    if (score === null) return "border-gray-300 text-gray-400"
+    if (score >= 90) return "border-green-500 text-green-600"
+    if (score >= 50) return "border-yellow-500 text-yellow-600"
+    return "border-red-500 text-red-600"
+  }
+
+  const getScoreColor = (score: number | null) => {
+    if (score === null) return "text-gray-400"
+    if (score >= 90) return "text-green-500"
+    if (score >= 50) return "text-yellow-500"
+    return "text-red-500"
+  }
+
+  const getProgressColor = (score: number) => {
+    if (score >= 90) return "bg-green-500"
+    if (score >= 80) return "bg-yellow-500"
+    if (score >= 70) return "bg-orange-500"
+    return "bg-red-500"
+  }
 
   useEffect(() => {
     console.log("State updated:", {
@@ -54,6 +80,38 @@ export default function Home() {
       partialResults,
     })
   }, [overallScores, componentsArray, summaries, actionableItemsArray, errors, partialResults])
+
+  useEffect(() => {
+    const loadPageData = async () => {
+      // Only load data if we have valid URLs and main analysis has completed
+      if (overallScores.length === 0 || !overallScores[0]) return
+
+      const urlToAnalyze = urls[0].trim()
+      if (!urlToAnalyze) return
+
+      if (pageAnalysisData.length === 0) {
+        loadPageAnalysisData(urlToAnalyze)
+      }
+    }
+
+    loadPageData()
+  }, [overallScores, pageAnalysisData.length])
+
+  const loadPageAnalysisData = async (url: string) => {
+    try {
+      setIsLoadingPageAnalysis(true)
+      const data = await generatePageAnalysisData(url)
+      if (data && !data.error) {
+        setPageAnalysisData(data)
+      } else {
+        console.error("Error loading page analysis data:", data.error)
+      }
+    } catch (error) {
+      console.error("Error loading page analysis data:", error)
+    } finally {
+      setIsLoadingPageAnalysis(false)
+    }
+  }
 
   const handleAnalysis = async () => {
     const urlsToAnalyze = urls.slice(0, activeUrlCount).filter((url) => url.trim() !== "")
@@ -70,6 +128,9 @@ export default function Home() {
     setSummaries(new Array(activeUrlCount).fill(""))
     setActionableItemsArray(new Array(activeUrlCount).fill([]))
     setPartialResults(new Array(activeUrlCount).fill(false))
+
+    // Reset tab data
+    setPageAnalysisData([])
 
     try {
       console.log("Starting analysis for URLs:", urlsToAnalyze)
@@ -130,7 +191,7 @@ export default function Home() {
 
               if (componentMatch) {
                 const [, score, content] = componentMatch
-                const rationaleRegex = /Rationale:\s*([\s\S]*?)(?=\nStrengths:|\nWeaknesses:|\n\n|$)/i
+                const rationaleRegex = /Rationale:\s*([\s\\S]*?)(?=\nStrengths:|\nWeaknesses:|\n\n|$)/i
                 const strengthsRegex = /Strengths:\s*((?:•[^\n]*\n*)+)/i
                 const weaknessesRegex = /Weaknesses:\s*((?:•[^\n]*\n*)+)/i
 
@@ -201,7 +262,7 @@ export default function Home() {
 
             try {
               const summaryMatch = analysis.match(
-                /Detailed Summary:\s*([\s\S]*?)(?=\n\nSpecific Actionable Items:|\s*$)/i,
+                /Detailed Summary:\s*([\s\\S]*?)(?=\n\nSpecific Actionable Items:|\s*$)/i,
               )
               if (summaryMatch) {
                 setSummaries((prev) => {
@@ -250,6 +311,11 @@ export default function Home() {
         errors,
         partialResults,
       })
+
+      // After main analysis is complete, load the page analysis data
+      if (urls[0]) {
+        loadPageAnalysisData(urls[0])
+      }
     } catch (error) {
       console.error("Error during analysis:", error)
       setErrors([
@@ -365,9 +431,9 @@ export default function Home() {
 
             {activeUrlCount === 1 && componentsArray[0]?.length > 0 && (
               <div className="mt-6 space-y-6">
-                <div className="text-center">
+                <div className="text-center flex flex-col items-center">
                   <h2 className="text-3xl font-bold text-[#4285F4]">Overall Score</h2>
-                  <p className="text-5xl font-bold text-[#4285F4] mt-2">{overallScores[0] ?? "N/A"}</p>
+                  <CircularProgress value={overallScores[0] ?? 0} size={160} strokeWidth={12} className="mt-4" />
                 </div>
 
                 <Accordion type="multiple" className="w-full">
@@ -376,11 +442,15 @@ export default function Home() {
                       <AccordionTrigger className="bg-[#e8f0fe] p-4 rounded-t-lg">
                         <div className="flex justify-between items-center w-full">
                           <h3 className="text-lg font-semibold text-[#4285F4]">{component.name}</h3>
-                          <span className="font-bold text-[#4285F4]">{component.score}/100</span>
+                          <span className={`font-bold ${getScoreColor(component.score)}`}>{component.score}/100</span>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="bg-white p-4 rounded-b-lg border border-[#e8f0fe]">
-                        <Progress value={component.score} className="h-2 mb-2" />
+                        <Progress
+                          value={component.score}
+                          className="h-2 mb-2"
+                          indicatorClassName={getProgressColor(component.score)}
+                        />
                         <p className="text-sm text-black mb-4">{component.rationale}</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
@@ -447,15 +517,15 @@ export default function Home() {
               <div className="mt-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Overall Scores Comparison */}
-                  <div className="text-center">
+                  <div className="text-center flex flex-col items-center">
                     <h2 className="text-2xl font-bold text-[#4285F4]">Website 1 Score</h2>
-                    <p className="text-4xl font-bold text-[#4285F4] mt-2">{overallScores[0] ?? "N/A"}</p>
-                    <p className="text-sm text-gray-500 mt-1">{urls[0]}</p>
+                    <CircularProgress value={overallScores[0] ?? 0} size={120} strokeWidth={10} className="mt-4" />
+                    <p className="text-sm text-gray-500 mt-3">{urls[0]}</p>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center flex flex-col items-center">
                     <h2 className="text-2xl font-bold text-[#4285F4]">Website 2 Score</h2>
-                    <p className="text-4xl font-bold text-[#4285F4] mt-2">{overallScores[1] ?? "N/A"}</p>
-                    <p className="text-sm text-gray-500 mt-1">{urls[1]}</p>
+                    <CircularProgress value={overallScores[1] ?? 0} size={120} strokeWidth={10} className="mt-4" />
+                    <p className="text-sm text-gray-500 mt-3">{urls[1]}</p>
                   </div>
                 </div>
 
@@ -517,8 +587,12 @@ export default function Home() {
                           <div className="flex justify-between items-center w-full">
                             <h3 className="text-lg font-semibold text-[#4285F4]">{name}</h3>
                             <div className="flex space-x-4">
-                              <span className="font-bold text-[#4285F4]">Site 1: {comp1?.score ?? "N/A"}</span>
-                              <span className="font-bold text-[#4285F4]">Site 2: {comp2?.score ?? "N/A"}</span>
+                              <span className={`font-bold ${getScoreColor(comp1?.score)}`}>
+                                Site 1: {comp1?.score ?? "N/A"}
+                              </span>
+                              <span className={`font-bold ${getScoreColor(comp2?.score)}`}>
+                                Site 2: {comp2?.score ?? "N/A"}
+                              </span>
                             </div>
                           </div>
                         </AccordionTrigger>
@@ -529,7 +603,11 @@ export default function Home() {
                               <h4 className="font-bold text-[#4285F4] mb-2">Website 1</h4>
                               {comp1 ? (
                                 <>
-                                  <Progress value={comp1.score} className="h-2 mb-2" />
+                                  <Progress
+                                    value={comp1.score}
+                                    className="h-2 mb-2"
+                                    indicatorClassName={getProgressColor(comp1.score)}
+                                  />
                                   <p className="text-sm text-black mb-4">{comp1.rationale}</p>
                                   <div className="space-y-4">
                                     <div>
@@ -572,7 +650,11 @@ export default function Home() {
                               <h4 className="font-bold text-[#4285F4] mb-2">Website 2</h4>
                               {comp2 ? (
                                 <>
-                                  <Progress value={comp2.score} className="h-2 mb-2" />
+                                  <Progress
+                                    value={comp2.score}
+                                    className="h-2 mb-2"
+                                    indicatorClassName={getProgressColor(comp2.score)}
+                                  />
                                   <p className="text-sm text-black mb-4">{comp2.rationale}</p>
                                   <div className="space-y-4">
                                     <div>
@@ -679,9 +761,45 @@ export default function Home() {
                 )}
               </div>
             )}
+
+            {(componentsArray[0]?.length > 0 || componentsArray[1]?.length > 0) && (
+              <div className="mt-8">
+                <h2 className="text-2xl font-bold text-[#4285F4] mb-6">Page Analysis</h2>
+                {isLoadingPageAnalysis ? (
+                  <div className="flex justify-center items-center p-12">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4285F4] mx-auto mb-4"></div>
+                      <p className="text-gray-500">Loading page analysis data...</p>
+                    </div>
+                  </div>
+                ) : pageAnalysisData.length > 0 ? (
+                  <div className="space-y-6">
+                    {pageAnalysisData.map((page, index) => (
+                      <PageAnalysis
+                        key={index}
+                        pageUrl={page.pageUrl}
+                        pageType={page.pageType}
+                        score={page.score}
+                        scoreReasoning={page.scoreReasoning}
+                        strengths={page.strengths}
+                        weaknesses={page.weaknesses}
+                        recommendations={page.recommendations}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center p-12 bg-white rounded-lg border">
+                    <p className="text-gray-500">
+                      No page analysis data available yet. Complete the website analysis to view page data.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
     </div>
   )
 }
+
