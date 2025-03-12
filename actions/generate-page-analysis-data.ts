@@ -1,6 +1,17 @@
 "use server"
 
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
+import { simulateUserFlow } from "./ai-agent"
+
+function isSameDomain(baseUrl: string, urlToCheck: string): boolean {
+  try {
+    const baseHostname = new URL(baseUrl).hostname
+    const checkHostname = new URL(urlToCheck).hostname
+    return baseHostname === checkHostname
+  } catch {
+    return false
+  }
+}
 
 // Simple in-memory cache
 const cache: { [key: string]: { result: any; timestamp: number } } = {}
@@ -24,122 +35,479 @@ interface PageAnalysis {
   }>
 }
 
-function parseAnalysisText(text: string, baseUrl: string): PageAnalysis[] {
+async function getActualPageUrls(baseUrl: string) {
+  try {
+    console.log(`Getting actual page URLs for ${baseUrl}`)
+    const websiteData = await simulateUserFlow(baseUrl)
+
+    // Create a map of page types to actual URLs
+    const pageUrls = {
+      Homepage: baseUrl,
+      "Product Listing": null,
+      "Product Detail": null,
+      "Shopping Cart": null,
+      Checkout: null,
+    }
+
+    // Find a category page for Product Listing
+    if (websiteData.categories && websiteData.categories.length > 0) {
+      // Try to find a category with products
+      const categoriesWithProducts = websiteData.categories
+        .filter((cat: { productCount: number }) => cat.productCount > 0)
+        .sort((a: { productCount: number }, b: { productCount: number }) => b.productCount - a.productCount)
+
+      if (categoriesWithProducts.length > 0) {
+        const categoryUrl = categoriesWithProducts[0].url
+        pageUrls["Product Listing"] = isSameDomain(baseUrl, categoryUrl) ? categoryUrl : null
+        console.log(`Selected category page with ${categoriesWithProducts[0].productCount} products: ${categoryUrl}`)
+      } else {
+        // Fallback to first category
+        const categoryUrl = websiteData.categories[0].url
+        pageUrls["Product Listing"] = isSameDomain(baseUrl, categoryUrl) ? categoryUrl : null
+      }
+    }
+
+    // Find a product page for Product Detail
+    if (websiteData.products && websiteData.products.length > 0) {
+      // Try to find a product with price and description
+      const productsWithDetails = websiteData.products.filter(
+        (product: { price: string; description: string }) => product.price && product.price !== "N/A" && product.description && product.description !== "N/A",
+      )
+
+      if (productsWithDetails.length > 0) {
+        const productUrl = productsWithDetails[0].url
+        pageUrls["Product Detail"] = isSameDomain(baseUrl, productUrl) ? productUrl : null
+        console.log(`Selected product page with details: ${productUrl}`)
+      } else {
+        // Fallback to first product
+        const productUrl = websiteData.products[0].url
+        pageUrls["Product Detail"] = isSameDomain(baseUrl, productUrl) ? productUrl : null
+      }
+    }
+
+    // Find cart page
+    if (websiteData.cart && websiteData.cart.url) {
+      const cartUrl = websiteData.cart.url
+      pageUrls["Shopping Cart"] = isSameDomain(baseUrl, cartUrl) ? cartUrl : null
+    }
+
+    // Find checkout page
+    if (websiteData.checkout && websiteData.checkout.url) {
+      const checkoutUrl = websiteData.checkout.url
+      pageUrls["Checkout"] = isSameDomain(baseUrl, checkoutUrl) ? checkoutUrl : null
+    }
+
+    console.log("Found actual page URLs:", pageUrls)
+    return pageUrls
+  } catch (error) {
+    console.error("Error getting actual page URLs:", error)
+    return {
+      Homepage: baseUrl,
+      "Product Listing": null,
+      "Product Detail": null,
+      "Shopping Cart": null,
+      Checkout: null,
+    }
+  }
+}
+
+// Enhanced parseAnalysisText function with more robust parsing
+function parseAnalysisText(
+  text: string,
+  baseUrl: string,
+  actualPageUrls: Record<string, string | null>,
+): PageAnalysis[] {
   const pageTypes = ["Homepage", "Product Listing", "Product Detail", "Shopping Cart", "Checkout"]
   const analyses: PageAnalysis[] = []
 
-  // Create a regex pattern to match each page section
-  const pageSectionRegex = new RegExp(`(${pageTypes.join("|")}):[\\s\\S]*?(?=(${pageTypes.join("|")}):|\$)`, "g")
+  console.log("Starting to parse analysis text")
+  console.log("Text length:", text.length)
 
-  // Find all page sections
-  const pageSections = text.match(pageSectionRegex) || []
+  // First, try to split by page type headers
+  let pageSections: string[] = []
 
-  console.log(`Found ${pageSections.length} page sections`)
+  // Try multiple approaches to extract page sections
+  // Approach 1: Use regex to find sections starting with page type followed by colon
+  const pageSectionRegex = new RegExp(
+    `(?:^|\n)(${pageTypes.join("|")}):[\\s\\S]*?(?=(?:\n(?:${pageTypes.join("|")}):|$))`,
+    "g",
+  )
+  pageSections = Array.from(text.matchAll(pageSectionRegex)).map((match) => match[0].trim())
 
-  pageSections.forEach((section) => {
+  // If that didn't work well, try another approach
+  if (pageSections.length < 3) {
+    console.log("First regex approach didn't find enough sections, trying alternative")
+    // Approach 2: Split by page type headers more aggressively
+    const pageTypeHeaders = pageTypes.map((type) => `\n${type}:`).join("|")
+    pageSections = text
+      .split(new RegExp(pageTypeHeaders))
+      .filter((_, index) => index > 0) // Skip the first split which is before any header
+      .map((section, index) => `${pageTypes[index]}:${section}`)
+  }
+
+  // If still not enough sections, try one more approach
+  if (pageSections.length < 3) {
+    console.log("Second approach didn't find enough sections, trying final approach")
+    // Approach 3: Just look for each page type explicitly
+    pageSections = []
+    for (const pageType of pageTypes) {
+      const regex = new RegExp(`${pageType}:[\\s\\S]*?(?=(?:\n(?:${pageTypes.join("|")}):|$))`, "i")
+      const match = text.match(regex)
+      if (match) {
+        pageSections.push(match[0])
+      }
+    }
+  }
+
+  console.log(`Found ${pageSections.length} page sections using regex`)
+
+  // If we still don't have enough sections, log the full text for debugging
+  if (pageSections.length < 3) {
+    console.log("Warning: Not enough page sections found. Full text:", text)
+  }
+
+  // Process each page section
+  for (let i = 0; i < pageSections.length; i++) {
+    const section = pageSections[i]
     try {
       // Determine page type
-      const pageTypeMatch = section.match(new RegExp(`^(${pageTypes.join("|")}):`))
-      if (!pageTypeMatch) return
-
-      const pageType = pageTypeMatch[1]
-      console.log(`Processing ${pageType} section`)
-
-      // Extract page URL
-      let pageUrl = section.match(/Page URL:\s*(.*?)(?=\n|$)/)?.[1]?.trim() || baseUrl
-      if (!pageUrl.startsWith("http")) {
-        pageUrl = baseUrl + (pageUrl.startsWith("/") ? pageUrl : "/" + pageUrl)
+      let pageType = ""
+      for (const type of pageTypes) {
+        if (section.startsWith(type + ":") || section.includes(`\n${type}:`)) {
+          pageType = type
+          break
+        }
       }
 
-      // Extract score
-      const scoreMatch = section.match(/Overall Score:\s*(\d+)/)
-      const score = scoreMatch ? Number.parseInt(scoreMatch[1]) : 0
+      if (!pageType) {
+        console.log(`Could not determine page type for section ${i + 1}, skipping`)
+        continue
+      }
 
-      // Extract score reasoning
-      const reasoningMatch = section.match(/Score Reasoning:\s*([\s\S]*?)(?=\nStrengths:|\n\n)/)
-      const scoreReasoning = reasoningMatch ? reasoningMatch[1].trim() : ""
+      console.log(`Processing ${pageType} section (${section.length} chars)`)
 
-      // Extract strengths
-      const strengthsMatch = section.match(/Strengths:\s*([\s\S]*?)(?=\nWeaknesses:|\n\n)/)
-      const strengthsText = strengthsMatch ? strengthsMatch[1] : ""
-      const strengths = strengthsText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter((s) => s.startsWith("•") || s.startsWith("-") || s.startsWith("*"))
-        .map((s) => s.replace(/^[•\-*]\s*/, "").replace(/\*\*(.*?)\*\*/g, "$1"))
+      // Use the actual URL we found during user flow simulation
+      // This ensures we only use URLs from the same domain
+      let pageUrl = actualPageUrls[pageType]
 
-      // Extract weaknesses
-      const weaknessesMatch = section.match(/Weaknesses:\s*([\s\S]*?)(?=\nRecommendations:|\n\n)/)
-      const weaknessesText = weaknessesMatch ? weaknessesMatch[1] : ""
-      const weaknesses = weaknessesText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter((s) => s.startsWith("•") || s.startsWith("-") || s.startsWith("*"))
-        .map((s) => s.replace(/^[•\-*]\s*/, "").replace(/\*\*(.*?)\*\*/g, "$1"))
+      // If we don't have an actual URL for this page type, set it to null
+      // We'll display "Not found" in the UI
+      if (!pageUrl && pageType !== "Homepage") {
+        pageUrl = null
+      }
 
-      // Extract recommendations
-      const recommendationsMatch = section.match(/Recommendations:\s*([\s\S]*?)(?=\n\n\w|$)/)
-      const recommendationsText = recommendationsMatch ? recommendationsMatch[1] : ""
+      // Extract score - try multiple patterns
+      let score = 0
+      const scorePatterns = [/Overall Score:\s*(\d+)/i, /Score:\s*(\d+)/i, /(\d+)\/100/i]
 
-      // Split recommendations by numbered items
-      const recommendationItems = recommendationsText.split(/\d+\.\s+/).filter(Boolean)
-
-      const recommendations = recommendationItems.map((item) => {
-        const lines = item
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean)
-
-        const suggestion = lines[0]?.replace(/\*\*(.*?)\*\*/g, "$1") || ""
-
-        // Find reasoning line
-        const reasoningLine = lines.find((line) => line.startsWith("Reasoning:")) || ""
-        const reasoning = reasoningLine
-          .replace("Reasoning:", "")
-          .trim()
-          .replace(/\*\*(.*?)\*\*/g, "$1")
-
-        // Extract reference website details
-        const nameMatch = item.match(/Name:\s*(.*?)(?=\n|$)/)
-        const urlMatch = item.match(/URL:\s*(.*?)(?=\n|$)/)
-        const descMatch = item.match(/Description:\s*(.*?)(?=\n|$)/)
-
-        return {
-          suggestion,
-          reasoning,
-          referenceWebsite: {
-            name: nameMatch ? nameMatch[1].trim().replace(/\*\*(.*?)\*\*/g, "$1") : "",
-            url: urlMatch ? urlMatch[1].trim() : "",
-            description: descMatch ? descMatch[1].trim().replace(/\*\*(.*?)\*\*/g, "$1") : "",
-          },
+      for (const pattern of scorePatterns) {
+        const match = section.match(pattern)
+        if (match && match[1]) {
+          score = Number.parseInt(match[1], 10)
+          if (score > 0) break
         }
-      })
+      }
 
+      // Extract score reasoning with multiple patterns
+      let scoreReasoning = ""
+      const reasoningPatterns = [
+        /Score Reasoning:\s*([\s\S]*?)(?=\n(?:Strengths:|Weaknesses:|Recommendations:)|\n\n)/i,
+        /Rationale:\s*([\s\S]*?)(?=\n(?:Strengths:|Weaknesses:|Recommendations:)|\n\n)/i,
+        /Reasoning:\s*([\s\S]*?)(?=\n(?:Strengths:|Weaknesses:|Recommendations:)|\n\n)/i,
+      ]
+
+      for (const pattern of reasoningPatterns) {
+        const match = section.match(pattern)
+        if (match && match[1] && match[1].trim().length > 0) {
+          scoreReasoning = match[1].trim()
+          break
+        }
+      }
+
+      // If still no reasoning but we have content, extract a default reasoning
+      if (!scoreReasoning && section.length > 200) {
+        // Try to extract the first paragraph after the page type as reasoning
+        const firstParaMatch = section.match(new RegExp(`${pageType}:.*?\n(.*?)(?=\n\n|$)`, "s"))
+        if (firstParaMatch && firstParaMatch[1] && firstParaMatch[1].trim().length > 10) {
+          scoreReasoning = firstParaMatch[1].trim()
+        } else {
+          scoreReasoning = "No specific reasoning provided in the analysis."
+        }
+      }
+
+      // Extract strengths with multiple patterns
+      let strengths: string[] = []
+      const strengthsPatterns = [
+        /Strengths:\s*([\s\S]*?)(?=\n(?:Weaknesses:|Recommendations:)|\n\n)/i,
+        /Pros:\s*([\s\S]*?)(?=\n(?:Weaknesses:|Cons:|Recommendations:)|\n\n)/i,
+        /Positive aspects:\s*([\s\S]*?)(?=\n(?:Weaknesses:|Negative aspects:|Recommendations:)|\n\n)/i,
+      ]
+
+      for (const pattern of strengthsPatterns) {
+        const match = section.match(pattern)
+        if (match && match[1]) {
+          const strengthsText = match[1].trim()
+          // Extract bullet points with multiple bullet styles
+          const bulletPoints = strengthsText
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(
+              (line) => line.startsWith("•") || line.startsWith("-") || line.startsWith("*") || /^\d+\./.test(line),
+            )
+            .map((line) => line.replace(/^[•\-*\d.]\s*/, "").trim())
+
+          if (bulletPoints.length > 0) {
+            strengths = bulletPoints
+            break
+          }
+
+          // If no bullet points found, try to split by newlines
+          const lines = strengthsText
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+          if (lines.length > 0) {
+            strengths = lines
+            break
+          }
+        }
+      }
+
+      // Extract weaknesses with multiple patterns
+      let weaknesses: string[] = []
+      const weaknessesPatterns = [
+        /Weaknesses:\s*([\s\S]*?)(?=\n(?:Recommendations:|Strengths:)|\n\n)/i,
+        /Cons:\s*([\s\S]*?)(?=\n(?:Recommendations:|Strengths:|Pros:)|\n\n)/i,
+        /Negative aspects:\s*([\s\S]*?)(?=\n(?:Recommendations:|Strengths:|Positive aspects:)|\n\n)/i,
+      ]
+
+      for (const pattern of weaknessesPatterns) {
+        const match = section.match(pattern)
+        if (match && match[1]) {
+          const weaknessesText = match[1].trim()
+          // Extract bullet points with multiple bullet styles
+          const bulletPoints = weaknessesText
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(
+              (line) => line.startsWith("•") || line.startsWith("-") || line.startsWith("*") || /^\d+\./.test(line),
+            )
+            .map((line) => line.replace(/^[•\-*\d.]\s*/, "").trim())
+
+          if (bulletPoints.length > 0) {
+            weaknesses = bulletPoints
+            break
+          }
+
+          // If no bullet points found, try to split by newlines
+          const lines = weaknessesText
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+          if (lines.length > 0) {
+            weaknesses = lines
+            break
+          }
+        }
+      }
+
+      // Extract recommendations with multiple patterns
+      let recommendationsText = ""
+      const recommendationsPatterns = [
+        /Recommendations:\s*([\s\S]*?)(?=\n\n(?:[A-Za-z]|$)|$)/i,
+        /Suggestions:\s*([\s\S]*?)(?=\n\n(?:[A-Za-z]|$)|$)/i,
+        /Improvements:\s*([\s\S]*?)(?=\n\n(?:[A-Za-z]|$)|$)/i,
+      ]
+
+      for (const pattern of recommendationsPatterns) {
+        const match = section.match(pattern)
+        if (match && match[1] && match[1].trim().length > 0) {
+          recommendationsText = match[1].trim()
+          break
+        }
+      }
+
+      // Parse recommendations with enhanced logic
+      let recommendations: Array<{
+        suggestion: string
+        reasoning: string
+        referenceWebsite: {
+          name: string
+          url: string
+          description: string
+        }
+      }> = []
+
+      if (recommendationsText) {
+        // Try multiple approaches to split recommendations
+
+        // Approach 1: Split by numbered items
+        let recommendationItems: string[] = recommendationsText
+          .split(/(?:\n|^)\s*\d+\.\s+/)
+          .filter(Boolean)
+          .map((item) => item.trim())
+
+        // Approach 2: If that didn't work well, try splitting by bullet points
+        if (recommendationItems.length < 1) {
+          recommendationItems = recommendationsText
+            .split(/(?:\n|^)\s*[•\-*]\s+/)
+            .filter(Boolean)
+            .map((item) => item.trim())
+        }
+
+        // Approach 3: If still not enough, try splitting by double newlines
+        if (recommendationItems.length < 1) {
+          recommendationItems = recommendationsText
+            .split(/\n\s*\n/)
+            .filter(Boolean)
+            .map((item) => item.trim())
+        }
+
+        // Process each recommendation item
+        recommendations = recommendationItems
+          .map((item) => {
+            // Split into lines for easier processing
+            const lines = item
+              .split("\n")
+              .map((line) => line.trim())
+              .filter(Boolean)
+
+            // First line is usually the suggestion
+            const suggestion = lines[0] || ""
+
+            // Look for reasoning
+            let reasoning = ""
+            const reasoningLine = lines.find(
+              (line) => line.startsWith("Reasoning:") || line.startsWith("Rationale:") || line.startsWith("Why:"),
+            )
+
+            if (reasoningLine) {
+              reasoning = reasoningLine.replace(/^(Reasoning|Rationale|Why):\s*/i, "").trim()
+            } else if (lines.length > 1) {
+              // If no explicit reasoning found, use the second line
+              reasoning = lines[1]
+            }
+
+            // Extract reference website details
+            const referenceWebsite = {
+              name: "",
+              url: "",
+              description: "",
+            }
+
+            // Find reference website section
+            const refIndex = lines.findIndex(
+              (line) => line.includes("Reference Website:") || line.includes("Reference:") || line.includes("Example:"),
+            )
+
+            if (refIndex !== -1) {
+              // Process reference website details
+              for (let i = refIndex + 1; i < lines.length; i++) {
+                const line = lines[i]
+
+                if (line.startsWith("Name:")) {
+                  referenceWebsite.name = line.replace(/^Name:\s*/i, "").trim()
+                } else if (line.startsWith("URL:")) {
+                  referenceWebsite.url = line.replace(/^URL:\s*/i, "").trim()
+                } else if (line.startsWith("Description:")) {
+                  referenceWebsite.description = line.replace(/^Description:\s*/i, "").trim()
+                } else if (!referenceWebsite.name && line.includes("http")) {
+                  // If we find a URL without explicit label
+                  const urlMatch = line.match(/(https?:\/\/[^\s]+)/)
+                  if (urlMatch) {
+                    referenceWebsite.url = urlMatch[1]
+                    referenceWebsite.name = line.replace(urlMatch[1], "").trim() || "Reference Website"
+                  }
+                }
+              }
+            } else {
+              // Look for URLs anywhere in the item
+              const urlMatch = item.match(/(https?:\/\/[^\s\n]+)/)
+              if (urlMatch) {
+                referenceWebsite.url = urlMatch[1]
+                referenceWebsite.name = "Reference Website"
+              }
+            }
+
+            return {
+              suggestion,
+              reasoning,
+              referenceWebsite,
+            }
+          })
+          .filter((rec) => rec.suggestion.length > 0) // Filter out empty suggestions
+      }
+
+      // Create the page analysis object
       analyses.push({
-        pageUrl,
+        pageUrl: pageUrl || null,
         pageType,
         score,
         scoreReasoning,
-        strengths: strengths.length > 0 ? strengths : ["No strengths provided"],
-        weaknesses: weaknesses.length > 0 ? weaknesses : ["No weaknesses provided"],
+        strengths: strengths.length > 0 ? strengths : ["No strengths provided in the analysis"],
+        weaknesses: weaknesses.length > 0 ? weaknesses : ["No weaknesses provided in the analysis"],
         recommendations:
           recommendations.length > 0
             ? recommendations
             : [
                 {
                   suggestion: "No recommendations provided",
-                  reasoning: "",
-                  referenceWebsite: { name: "", url: "", description: "" },
+                  reasoning: "The analysis did not include specific recommendations for this page type",
+                  referenceWebsite: {
+                    name: "",
+                    url: "",
+                    description: "",
+                  },
                 },
               ],
       })
+
+      console.log(`Successfully parsed ${pageType} section with score ${score}`)
     } catch (error) {
       console.error(`Error parsing section:`, error)
     }
-  })
+  }
 
-  // Only include page types that were actually found in the analysis
-  // We won't generate placeholders for missing page types
+  // If we didn't find all 5 page types, add placeholders for missing ones
+  const foundPageTypes = new Set(analyses.map((a) => a.pageType))
+
+  for (const pageType of pageTypes) {
+    if (!foundPageTypes.has(pageType)) {
+      console.log(`Adding placeholder for missing page type: ${pageType}`)
+      analyses.push({
+        pageUrl: actualPageUrls[pageType] || null,
+        pageType,
+        score: 0,
+        scoreReasoning: "This page type was not found in the analysis.",
+        strengths: ["No data available for this page type"],
+        weaknesses: ["No data available for this page type"],
+        recommendations: [
+          {
+            suggestion: "Try analyzing the website again",
+            reasoning: "This page type was not included in the analysis results",
+            referenceWebsite: {
+              name: "",
+              url: "",
+              description: "",
+            },
+          },
+        ],
+      })
+    }
+  }
+
+  // Sort analyses by page type to maintain consistent order
+  const pageTypeOrder = {
+    Homepage: 0,
+    "Product Listing": 1,
+    "Product Detail": 2,
+    "Shopping Cart": 3,
+    Checkout: 4,
+  }
+
+  analyses.sort((a, b) => pageTypeOrder[a.pageType] - pageTypeOrder[b.pageType])
+
+  console.log(`Returning ${analyses.length} page analyses`)
   return analyses
 }
 
@@ -152,6 +520,9 @@ export async function generatePageAnalysisData(url: string) {
       return cache[url].result
     }
 
+    // Get actual page URLs first
+    const actualPageUrls = await getActualPageUrls(url)
+
     const apiKey = process.env.GOOGLE_API_KEY
 
     if (!apiKey) {
@@ -163,10 +534,10 @@ export async function generatePageAnalysisData(url: string) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-thinking-exp-01-21" })
 
     const generationConfig = {
-      temperature: 0.4,
+      temperature: 0.7, // Reduced temperature for more consistent formatting
       topK: 1,
       topP: 1,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 4096, // Increased token limit for more detailed analysis
     }
 
     const safetySettings = [
@@ -188,41 +559,75 @@ export async function generatePageAnalysisData(url: string) {
       },
     ]
 
+    // Update the prompt to include the actual page URLs we found and emphasize consistent formatting
     const prompt = `
 Generate a detailed page analysis for the e-commerce website at ${url}.
-Focus on these page types: Homepage, Product Listing, Product Detail, Shopping Cart, and Checkout.
+Focus on these page types with their actual URLs:
+- Homepage: ${actualPageUrls["Homepage"]}
+- Product Listing: ${actualPageUrls["Product Listing"] || "Not found"}
+- Product Detail: ${actualPageUrls["Product Detail"] || "Not found"}
+- Shopping Cart: ${actualPageUrls["Shopping Cart"] || "Not found"}
+- Checkout: ${actualPageUrls["Checkout"] || "Not found"}
 
-For each page type, provide the following information:
-1. Page URL (use ${url} as the base URL)
-2. Page Type
-3. Overall Score (0-100)
-4. Score Reasoning (2-3 sentences)
-5. Three Strengths
-6. Three Weaknesses
-7. Two Recommendations, each including:
-   - Suggestion
-   - Reasoning
-   - Reference Website (name, URL, and brief description)
+IMPORTANT: You MUST provide an analysis for ALL FIVE page types listed above, even if some URLs are marked as "Not found". 
+For pages marked as "Not found", provide a general analysis based on typical pages of that type in e-commerce websites.
 
-Format your response as a detailed analysis. Do not use JSON format. Ensure each section is clearly labeled and separated.
+CRITICAL: Only analyze pages from the ${new URL(url).hostname} domain. Do not reference or analyze pages from other domains.
 
-IMPORTANT: Do not use markdown formatting like **bold** or *italic*. Use plain text only.
+For each page type, provide the following information in EXACTLY this format:
 
-Example format:
+[Page Type]:
+Page URL: [URL]
+Overall Score: [0-100]
+Score Reasoning: [2-3 sentences explaining the score]
+
+Strengths:
+• [Strength 1]
+• [Strength 2]
+• [Strength 3]
+
+Weaknesses:
+• [Weakness 1]
+• [Weakness 2]
+• [Weakness 3]
+
+Recommendations:
+1. [Suggestion 1]
+   Reasoning: [Explanation]
+   Reference Website:
+   Name: [Website Name]
+   URL: [Website URL]
+   Description: [Brief description]
+
+2. [Suggestion 2]
+   Reasoning: [Explanation]
+   Reference Website:
+   Name: [Website Name]
+   URL: [Website URL]
+   Description: [Brief description]
+
+CRITICAL: Follow this exact format for EACH page type. Use bullet points (•) for strengths and weaknesses, and numbered items for recommendations.
+CRITICAL: Include ALL sections for EACH page type.
+CRITICAL: Separate each page type with a blank line.
+CRITICAL: Do not use markdown formatting like **bold** or *italic*. Use plain text only.
+
+Example:
 
 Homepage:
-Page URL: ${url}
-Page Type: Homepage
+Page URL: ${actualPageUrls["Homepage"]}
 Overall Score: 85
 Score Reasoning: The homepage effectively showcases the brand and key products. It has a clean design and clear navigation. However, there's room for improvement in mobile responsiveness and call-to-action placement.
+
 Strengths:
 • Strong brand presentation
 • Clear product categories
 • Engaging hero image
+
 Weaknesses:
 • Limited mobile optimization
 • Cluttered footer
 • Lack of personalized content
+
 Recommendations:
 1. Improve mobile responsiveness
    Reasoning: A significant portion of e-commerce traffic comes from mobile devices. Enhancing mobile experience can increase conversion rates.
@@ -239,36 +644,11 @@ Recommendations:
    Description: Demonstrates a well-organized and minimal footer design
 
 Product Listing:
-Page URL: ${url}/collections
-Page Type: Product Listing
+Page URL: ${actualPageUrls["Product Listing"] || "Not found"}
 Overall Score: 80
-Score Reasoning: The product listing pages provide good filtering options and clear product information. However, there are opportunities to improve sorting options and visual hierarchy.
-Strengths:
-• Effective filtering options
-• Clear product thumbnails
-• Consistent layout
-Weaknesses:
-• Limited sorting options
-• Pagination could be improved
-• Lack of quick view functionality
-Recommendations:
-1. Add more sorting options
-   Reasoning: Additional sorting options like "Best Selling" or "New Arrivals" can help users find relevant products faster.
-   Reference Website:
-   Name: Nordstrom
-   URL: https://www.nordstrom.com
-   Description: Offers comprehensive sorting options that enhance product discovery
-
-2. Implement quick view functionality
-   Reasoning: Quick view allows users to preview product details without leaving the listing page, improving browsing efficiency.
-   Reference Website:
-   Name: Sephora
-   URL: https://www.sephora.com
-   Description: Features an effective quick view implementation that shows key product details
+...
 
 [Continue with similar detailed analyses for Product Detail, Shopping Cart, and Checkout pages]
-
-Ensure that you provide a comprehensive analysis for all five page types mentioned above.
 `
 
     console.log("Sending page analysis prompt to Gemini API")
@@ -285,10 +665,12 @@ Ensure that you provide a comprehensive analysis for all five page types mention
       throw new Error("Failed to generate page analysis data")
     }
 
-    console.log("Raw API response:", text)
+    console.log("Raw API response length:", text.length)
+    // Log the first 500 characters for debugging
+    console.log("Raw API response (first 500 chars):", text.substring(0, 500))
 
-    // Parse the text into structured data
-    const parsedData = parseAnalysisText(text, url)
+    // Parse the text into structured data, passing the actual page URLs
+    const parsedData = parseAnalysisText(text, url, actualPageUrls)
 
     console.log(`Parsed ${parsedData.length} page analyses`)
 
@@ -301,7 +683,7 @@ Ensure that you provide a comprehensive analysis for all five page types mention
     console.error(`Error generating page analysis data for ${url}:`, error)
     // Return placeholder data for all page types
     return ["Homepage", "Product Listing", "Product Detail", "Shopping Cart", "Checkout"].map((pageType) => ({
-      pageUrl: url + (pageType === "Homepage" ? "" : "/" + pageType.toLowerCase().replace(" ", "-")),
+      pageUrl: pageType === "Homepage" ? url : null,
       pageType,
       score: 0,
       scoreReasoning: "An error occurred while generating analysis data.",
@@ -312,9 +694,9 @@ Ensure that you provide a comprehensive analysis for all five page types mention
           suggestion: "Try analyzing the website again",
           reasoning: "Temporary error occurred during analysis",
           referenceWebsite: {
-            name: "Tata CX Support",
-            url: "https://example.com/support",
-            description: "Contact support if the issue persists",
+            name: "",
+            url: "",
+            description: "",
           },
         },
       ],

@@ -59,7 +59,7 @@ function findNavigationElements($: cheerio.CheerioAPI): string[] {
   ]
 
   navigationSelectors.forEach((selector) => {
-    $(selector).each((_, el) => {
+    $(selector).each((_: any, el: any) => {
       const $el = $(el)
       const href = $el.attr("href")
       const text = $el.text().trim()
@@ -82,11 +82,25 @@ function findNavigationElements($: cheerio.CheerioAPI): string[] {
   return Array.from(links)
 }
 
+// Update the findProductElements function to better detect Nike product pages
 function findProductElements($: cheerio.CheerioAPI): string[] {
   const links = new Set<string>()
 
   // Common product link patterns
   const productSelectors = [
+    // Nike-specific selectors
+    'a[href*="/t/"]',
+    'a[href*="/product"]',
+    ".product-card a",
+    ".product-grid__card a",
+    ".product-card__link-overlay",
+    ".product-card__img-link-overlay",
+    "a[data-product-id]",
+    'a[data-test="product-card"]',
+    'a[aria-label*="product"]',
+    'a[data-qa="product-card"]',
+
+    // General e-commerce product selectors
     'a[href*="/product"]',
     'a[href*="/p/"]',
     'a[href*="/item"]',
@@ -108,16 +122,82 @@ function findProductElements($: cheerio.CheerioAPI): string[] {
     ".product-name a",
     '[class*="product-title"] a',
     '[class*="product-name"] a',
+
+    // Additional general patterns
+    'a[href*="shoes"]',
+    'a[href*="clothing"]',
+    'a[href*="apparel"]',
+    'a[href*="gear"]',
+    'a[href*="equipment"]',
+    'a[href*="accessories"]',
+    'a[href*="collection"]',
+    'a[href*="detail"]',
+    'a[href*="buy"]',
+    'a[href*="shop"]',
+    'a[href*="pid="]',
+    'a[href*="skuid="]',
+    'a[href*="style="]',
   ]
 
+  // First try the selectors
   productSelectors.forEach((selector) => {
-    $(selector).each((_, el) => {
+    $(selector).each((_: any, el: any) => {
       const href = $(el).attr("href")
       if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
         links.add(href)
       }
     })
   })
+
+  // If we still don't have enough product links, try to find links with product-related text
+  if (links.size < 3) {
+    $("a").each((_: any, el: any) => {
+      const $el = $(el)
+      const href = $el.attr("href")
+      const text = $el.text().toLowerCase().trim()
+
+      if (
+        href &&
+        !href.startsWith("#") &&
+        !href.startsWith("javascript:") &&
+        !links.has(href) &&
+        (text.includes("shoe") ||
+          text.includes("sneaker") ||
+          text.includes("product") ||
+          text.includes("item") ||
+          text.includes("buy") ||
+          text.includes("gear") ||
+          text.includes("apparel") ||
+          text.includes("clothing") ||
+          text.includes("equipment"))
+      ) {
+        links.add(href)
+      }
+    })
+  }
+
+  // Look for image links that might be product links
+  if (links.size < 3) {
+    $("a:has(img)").each((_: any, el: any) => {
+      const $el = $(el)
+      const href = $el.attr("href")
+
+      if (
+        href &&
+        !href.startsWith("#") &&
+        !href.startsWith("javascript:") &&
+        !links.has(href) &&
+        (href.includes("/product") ||
+          href.includes("/p/") ||
+          href.includes("/t/") ||
+          href.includes("/item") ||
+          href.includes("pid=") ||
+          href.includes("skuid="))
+      ) {
+        links.add(href)
+      }
+    })
+  }
 
   return Array.from(links)
 }
@@ -180,42 +260,247 @@ function findAddToCartButton($: cheerio.CheerioAPI) {
   return null
 }
 
+// Enhance the findCartIcon function with more comprehensive selectors
 function findCartIcon($: cheerio.CheerioAPI): string | null {
-  // Common cart icon patterns
+  // Common cart icon patterns - expanded with more patterns
   const cartSelectors = [
+    // Standard cart links
     'a[href*="cart"]',
     'a[href*="basket"]',
     'a[href*="bag"]',
+    'a[href*="shopping"]',
+    'a[href*="checkout"]',
+    'a[href*="kasse"]', // German
+    'a[href*="panier"]', // French
+    'a[href*="carrello"]', // Italian
+    'a[href*="carro"]', // Spanish
+
+    // Class-based selectors
     '[class*="cart"]',
     '[class*="basket"]',
     '[class*="bag"]',
     '[class*="shopping"]',
+    '[class*="checkout"]',
+    '[class*="minicart"]',
+    '[class*="mini-cart"]',
+    '[class*="cartIcon"]',
+    '[class*="cart-icon"]',
+    '[class*="cart_icon"]',
+    '[class*="icon-cart"]',
+    '[class*="icon_cart"]',
+
+    // ARIA attributes
     '[aria-label*="cart" i]',
     '[aria-label*="basket" i]',
     '[aria-label*="bag" i]',
     '[aria-label*="shopping" i]',
+    '[aria-label*="checkout" i]',
+    '[aria-label*="your items" i]',
+
+    // Title attributes
     '[title*="cart" i]',
     '[title*="basket" i]',
     '[title*="bag" i]',
-    '[class*="icon-cart"]',
-    '[class*="cart-icon"]',
-    '[class*="icon-basket"]',
-    '[class*="basket-icon"]',
+    '[title*="shopping" i]',
+    '[title*="checkout" i]',
+
+    // ID-based selectors
+    '[id*="cart"]',
+    '[id*="basket"]',
+    '[id*="bag"]',
+    '[id*="shopping"]',
+    '[id*="checkout"]',
+    '[id*="minicart"]',
+    '[id*="mini-cart"]',
+
+    // Data attributes
+    '[data-testid*="cart"]',
+    '[data-testid*="basket"]',
+    '[data-testid*="bag"]',
+    '[data-test*="cart"]',
+    '[data-component*="cart"]',
+    '[data-role*="cart"]',
+
+    // Common icon patterns
+    ".fa-shopping-cart",
+    ".fa-cart",
+    ".fa-shopping-bag",
+    ".fa-shopping-basket",
+    '.material-icons:contains("shopping_cart")',
+    '.material-icons:contains("shopping_basket")',
+
+    // Common button patterns
+    'button[class*="cart"]',
+    'button[class*="basket"]',
+    'button[class*="bag"]',
+    'button[aria-label*="cart" i]',
+    'button[title*="cart" i]',
+
+    // SVG patterns
+    'svg[class*="cart"]',
+    'svg[class*="basket"]',
+    'svg[class*="bag"]',
   ]
 
+  // First try direct cart links
   for (const selector of cartSelectors) {
     const element = $(selector).first()
     if (element.length) {
-      const href = element.attr("href") || element.parent("a").attr("href")
+      // Check if the element itself is a link
+      const href = element.attr("href")
       if (href) {
         return href
       }
+
+      // Check if the element is inside a link
+      const parentLink = element.closest("a")
+      if (parentLink.length && parentLink.attr("href")) {
+        return parentLink.attr("href")
+      }
+
+      // Check if the element has a link inside it
+      const childLink = element.find("a").first()
+      if (childLink.length && childLink.attr("href")) {
+        return childLink.attr("href")
+      }
     }
   }
+
+  // If no direct cart link found, look for text-based links
+  const cartTextLinks = $("a").filter((_: any, el: any) => {
+    const text = $(el).text().toLowerCase().trim()
+    return (
+      text === "cart" ||
+      text === "view cart" ||
+      text === "shopping cart" ||
+      text === "my cart" ||
+      text === "basket" ||
+      text === "shopping basket" ||
+      text === "bag" ||
+      text === "shopping bag" ||
+      text === "checkout" ||
+      text === "proceed to checkout"
+    )
+  })
+
+  if (cartTextLinks.length) {
+    return cartTextLinks.first().attr("href") || null
+  }
+
   return null
 }
 
-async function simulateUserFlow(baseUrl: string) {
+// Add a new function to find checkout buttons/links
+function findCheckoutButton($: cheerio.CheerioAPI): string | null {
+  // Common checkout button patterns
+  const checkoutSelectors = [
+    // Standard checkout links
+    'a[href*="checkout"]',
+    'a[href*="payment"]',
+    'a[href*="order"]',
+    'a[href*="purchase"]',
+    'a[href*="buy"]',
+    'a[href*="kasse"]', // German
+    'a[href*="paiement"]', // French
+    'a[href*="pagamento"]', // Italian
+    'a[href*="pago"]', // Spanish
+
+    // Button selectors
+    'button[class*="checkout"]',
+    'button[class*="payment"]',
+    'button[class*="order"]',
+    'button[class*="purchase"]',
+    'button[class*="buy"]',
+
+    // Class-based selectors
+    '[class*="checkout"]',
+    '[class*="check-out"]',
+    '[class*="payment"]',
+    '[class*="order-now"]',
+    '[class*="purchase"]',
+
+    // ARIA attributes
+    '[aria-label*="checkout" i]',
+    '[aria-label*="payment" i]',
+    '[aria-label*="order" i]',
+    '[aria-label*="purchase" i]',
+
+    // Title attributes
+    '[title*="checkout" i]',
+    '[title*="payment" i]',
+    '[title*="order" i]',
+    '[title*="purchase" i]',
+
+    // ID-based selectors
+    '[id*="checkout"]',
+    '[id*="payment"]',
+    '[id*="order"]',
+    '[id*="purchase"]',
+
+    // Data attributes
+    '[data-testid*="checkout"]',
+    '[data-test*="checkout"]',
+    '[data-component*="checkout"]',
+    '[data-role*="checkout"]',
+
+    // Form selectors
+    'form[action*="checkout"] button[type="submit"]',
+    'form[action*="payment"] button[type="submit"]',
+    'form[action*="order"] button[type="submit"]',
+  ]
+
+  // First try direct checkout elements
+  for (const selector of checkoutSelectors) {
+    const element = $(selector).first()
+    if (element.length) {
+      // Check if the element itself is a link
+      const href = element.attr("href")
+      if (href) {
+        return href
+      }
+
+      // Check if the element is inside a link
+      const parentLink = element.closest("a")
+      if (parentLink.length && parentLink.attr("href")) {
+        return parentLink.attr("href")
+      }
+
+      // Check if the element has a link inside it
+      const childLink = element.find("a").first()
+      if (childLink.length && childLink.attr("href")) {
+        return childLink.attr("href")
+      }
+    }
+  }
+
+  // If no direct checkout element found, look for text-based links
+  const checkoutTextLinks = $("a").filter((_: any, el: any) => {
+    const text = $(el).text().toLowerCase().trim()
+    return (
+      text === "checkout" ||
+      text === "proceed to checkout" ||
+      text === "go to checkout" ||
+      text === "continue to checkout" ||
+      text === "secure checkout" ||
+      text === "place order" ||
+      text === "complete order" ||
+      text === "buy now" ||
+      text === "pay now" ||
+      text === "payment"
+    )
+  })
+
+  if (checkoutTextLinks.length) {
+    return checkoutTextLinks.first().attr("href") || null
+  }
+
+  return null
+}
+
+// Update the simulateUserFlow function to use the new findCheckoutButton function
+// and improve cart/checkout detection
+// Update the simulateUserFlow function to improve product page exploration
+export async function simulateUserFlow(baseUrl: string) {
   console.log(`Simulating user flow for: ${baseUrl}`)
   const data: any = {}
 
@@ -228,7 +513,7 @@ async function simulateUserFlow(baseUrl: string) {
       title: $homepage("title").text().trim(),
       description: $homepage('meta[name="description"]').attr("content") || "",
       h1Tags: $homepage("h1")
-        .map((_, el) => $homepage(el).text().trim())
+        .map((_: any, el: any) => $homepage(el).text().trim())
         .get(),
     }
 
@@ -255,6 +540,16 @@ async function simulateUserFlow(baseUrl: string) {
 
         data.categories.push(categoryData)
         console.log(`Category explored: ${categoryData.url}`)
+
+        // Try to find product links from category pages
+        if (data.categories.length === 1) {
+          const productLinksFromCategory = findProductElements($category)
+          if (productLinksFromCategory.length > 0) {
+            console.log(`Found ${productLinksFromCategory.length} product links from category page`)
+            // Save these for later if we don't find enough from homepage
+            data._productLinksFromCategory = productLinksFromCategory
+          }
+        }
       } catch (error) {
         console.log(`Failed to process category link ${link}:`, error)
       }
@@ -263,7 +558,57 @@ async function simulateUserFlow(baseUrl: string) {
     // Step 3: Explore multiple product pages
     data.products = []
 
-    const productLinks = findProductElements($homepage)
+    // First try to get product links from homepage
+    let productLinks = findProductElements($homepage)
+    console.log(`Found ${productLinks.length} product links from homepage`)
+
+    // If we didn't find enough product links from homepage, try from category pages
+    if (productLinks.length < 3 && data._productLinksFromCategory && data._productLinksFromCategory.length > 0) {
+      console.log(`Using product links from category page instead`)
+      productLinks = data._productLinksFromCategory
+    }
+
+    // If we still don't have enough links, try a more aggressive approach
+    if (productLinks.length < 2) {
+      console.log(`Not enough product links found, trying more aggressive approach`)
+
+      // Try to find links that might be product links based on URL patterns
+      $homepage("a").each((_: any, el: any) => {
+        const href = $homepage(el).attr("href")
+        if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
+          // Check for common product URL patterns
+          if (
+            href.includes("/product") ||
+            href.includes("/p/") ||
+            href.includes("/t/") ||
+            href.includes("/item") ||
+            href.includes("pid=") ||
+            href.includes("skuid=") ||
+            href.includes("style=") ||
+            href.match(/\/[a-z0-9-]+\/[a-z0-9-]+$/i)
+          ) {
+            // Pattern like /category/product-name
+            productLinks.push(href)
+          }
+        }
+      })
+
+      // Remove duplicates
+      productLinks = [...new Set(productLinks)]
+      console.log(`After aggressive approach, found ${productLinks.length} product links`)
+    }
+
+    // Nike-specific fallback if we still don't have product links
+    if (productLinks.length === 0 && baseUrl.includes("nike.com")) {
+      console.log("Using Nike-specific fallback for product links")
+      // Try some common Nike product URLs
+      productLinks = [
+        "/t/air-force-1-07-shoes-WrLlWX/CW2288-111",
+        "/t/air-jordan-1-mid-shoes-BpARGV/554724-140",
+        "/t/dunk-low-shoes-N8M9ck/DD1391-100",
+      ]
+    }
+
     for (const link of productLinks.slice(0, 3)) {
       // Explore up to 3 products
       try {
@@ -275,20 +620,50 @@ async function simulateUserFlow(baseUrl: string) {
         const productData = {
           url: productUrl,
           title: $product("title").text().trim(),
-          price: $product('[itemprop="price"], .price, [class*="price"]').first().text().trim() || "N/A",
+          price:
+            $product('[itemprop="price"], .price, [class*="price"], [data-test="product-price"]')
+              .first()
+              .text()
+              .trim() || "N/A",
           description:
-            $product('[itemprop="description"], .description, [class*="description"]').first().text().trim() || "N/A",
+            $product(
+              '[itemprop="description"], .description, [class*="description"], [data-test="product-description"]',
+            )
+              .first()
+              .text()
+              .trim() || "N/A",
         }
 
         data.products.push(productData)
         console.log(`Product explored: ${productData.url}`)
       } catch (error) {
-        console.log(`Failed to process product link ${link}:`, error)
+        console.log(`Failed to process product link ${link}:`, parseError(error))
       }
     }
 
     // Step 4: Explore cart and checkout process
-    const cartUrl = findCartIcon($homepage)
+    // First try to find cart from homepage
+    let cartUrl = findCartIcon($homepage)
+    console.log(`Cart URL from homepage: ${cartUrl || "Not found"}`)
+
+    // If cart not found on homepage, try to find it from product pages
+    if (!cartUrl && data.products.length > 0) {
+      for (const product of data.products) {
+        try {
+          console.log(`Looking for cart on product page: ${product.url}`)
+          const productHtml = await fetchPage(product.url)
+          const $product = cheerio.load(productHtml)
+          cartUrl = findCartIcon($product)
+          if (cartUrl) {
+            console.log(`Found cart URL on product page: ${cartUrl}`)
+            break
+          }
+        } catch (error) {
+          console.log(`Failed to check for cart on product page ${product.url}:`, parseError(error))
+        }
+      }
+    }
+
     if (cartUrl) {
       try {
         const fullCartUrl = new URL(cartUrl, baseUrl).href
@@ -299,38 +674,120 @@ async function simulateUserFlow(baseUrl: string) {
         data.cart = {
           url: fullCartUrl,
           title: $cart("title").text().trim(),
-          itemCount: $cart('[class*="cart-item"], [class*="cart_item"]').length,
+          itemCount: $cart(
+            '[class*="cart-item"], [class*="cart_item"], [class*="item"], [class*="product"], tr:has(td)',
+          ).length,
         }
         console.log(`Cart explored: ${data.cart.url}`)
 
         // Try to find checkout button
-        const checkoutButton = $cart('a[href*="checkout"], button[class*="checkout"]').first()
-        if (checkoutButton.length) {
-          const checkoutUrl = new URL(checkoutButton.attr("href") || "", baseUrl).href
-          console.log(`Exploring checkout: ${checkoutUrl}`)
-          const checkoutHtml = await fetchPage(checkoutUrl)
+        let checkoutUrl = findCheckoutButton($cart)
+        console.log(`Checkout URL from cart: ${checkoutUrl || "Not found"}`)
+
+        if (checkoutUrl) {
+          const fullCheckoutUrl = new URL(checkoutUrl, baseUrl).href
+          console.log(`Exploring checkout: ${fullCheckoutUrl}`)
+          const checkoutHtml = await fetchPage(fullCheckoutUrl)
           const $checkout = cheerio.load(checkoutHtml)
 
           data.checkout = {
-            url: checkoutUrl,
+            url: fullCheckoutUrl,
             title: $checkout("title").text().trim(),
-            steps: $checkout('[class*="checkout-step"], [class*="step"]')
-              .map((_, el) => $checkout(el).text().trim())
+            steps: $checkout(
+              '[class*="checkout-step"], [class*="step"], [class*="progress"], [class*="stage"], ol li, ul[class*="step"] li',
+            )
+              .map((_: any, el: any) => $checkout(el).text().trim())
               .get(),
+            hasPaymentForm:
+              $checkout(
+                'input[name*="card"], input[type="credit-card"], [class*="payment"], [class*="credit-card"], [id*="payment"]',
+              ).length > 0,
+            hasAddressForm:
+              $checkout(
+                'input[name*="address"], [class*="address"], [id*="address"], input[name*="zip"], input[name*="postal"]',
+              ).length > 0,
           }
           console.log(`Checkout explored: ${data.checkout.url}`)
+        } else {
+          // If checkout not found on cart page, try direct checkout links from homepage
+          checkoutUrl = findCheckoutButton($homepage)
+          if (checkoutUrl) {
+            const fullCheckoutUrl = new URL(checkoutUrl, baseUrl).href
+            console.log(`Exploring direct checkout from homepage: ${fullCheckoutUrl}`)
+            const checkoutHtml = await fetchPage(fullCheckoutUrl)
+            const $checkout = cheerio.load(checkoutHtml)
+
+            data.checkout = {
+              url: fullCheckoutUrl,
+              title: $checkout("title").text().trim(),
+              steps: $checkout(
+                '[class*="checkout-step"], [class*="step"], [class*="progress"], [class*="stage"], ol li, ul[class*="step"] li',
+              )
+                .map((_: any, el: any) => $checkout(el).text().trim())
+                .get(),
+              hasPaymentForm:
+                $checkout(
+                  'input[name*="card"], input[type="credit-card"], [class*="payment"], [class*="credit-card"], [id*="payment"]',
+                ).length > 0,
+              hasAddressForm:
+                $checkout(
+                  'input[name*="address"], [class*="address"], [id*="address"], input[name*="zip"], input[name*="postal"]',
+                ).length > 0,
+            }
+            console.log(`Direct checkout explored: ${data.checkout.url}`)
+          }
         }
       } catch (error) {
-        console.log("Failed to process cart or checkout:", error)
+        console.log("Failed to process cart or checkout:", parseError(error))
+      }
+    } else {
+      // If no cart found, try direct checkout from homepage
+      const checkoutUrl = findCheckoutButton($homepage)
+      if (checkoutUrl) {
+        try {
+          const fullCheckoutUrl = new URL(checkoutUrl, baseUrl).href
+          console.log(`Exploring direct checkout: ${fullCheckoutUrl}`)
+          const checkoutHtml = await fetchPage(fullCheckoutUrl)
+          const $checkout = cheerio.load(checkoutHtml)
+
+          data.checkout = {
+            url: fullCheckoutUrl,
+            title: $checkout("title").text().trim(),
+            steps: $checkout(
+              '[class*="checkout-step"], [class*="step"], [class*="progress"], [class*="stage"], ol li, ul[class*="step"] li',
+            )
+              .map((_: any, el: any) => $checkout(el).text().trim())
+              .get(),
+            hasPaymentForm:
+              $checkout(
+                'input[name*="card"], input[type="credit-card"], [class*="payment"], [class*="credit-card"], [id*="payment"]',
+              ).length > 0,
+            hasAddressForm:
+              $checkout(
+                'input[name*="address"], [class*="address"], [id*="address"], input[name*="zip"], input[name*="postal"]',
+              ).length > 0,
+          }
+          console.log(`Direct checkout explored: ${data.checkout.url}`)
+        } catch (error) {
+          console.log("Failed to process direct checkout:", parseError(error))
+        }
       }
     }
 
     console.log("User flow simulation completed successfully")
     return data
   } catch (error) {
-    console.error("Error during user flow simulation:", error)
+    console.error("Error during user flow simulation:", parseError(error))
     return data
   }
+}
+
+// Helper function to safely parse errors
+function parseError(error: any): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  return String(error)
 }
 
 export async function analyzeWebsite(url: string) {

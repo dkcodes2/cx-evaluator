@@ -612,17 +612,9 @@ export default function Home() {
                           pageType={page.pageType}
                           score={page.score}
                           scoreReasoning={page.scoreReasoning}
-                          strengths={page.strengths.filter(
-                            (s) => s !== "No data available" && s !== "Data unavailable due to error",
-                          )}
-                          weaknesses={page.weaknesses.filter(
-                            (w) => w !== "No data available" && w !== "Data unavailable due to error",
-                          )}
-                          recommendations={page.recommendations.filter(
-                            (r) =>
-                              r.suggestion !== "No recommendations available" &&
-                              r.suggestion !== "Try analyzing the website again",
-                          )}
+                          strengths={page.strengths}
+                          weaknesses={page.weaknesses}
+                          recommendations={page.recommendations}
                         />
                       ))}
                     </div>
