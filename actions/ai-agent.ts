@@ -452,46 +452,20 @@ ${contentForAnalysis}
       return JSON.stringify({ isEcommerce: false, message: "This website does not appear to be an e-commerce site." })
     }
 
-    const prompt = `Analyze this e-commerce website content and provide a comprehensive CX (Customer Experience) evaluation. Evaluate the following aspects:
+    const prompt = `Analyze this e-commerce website content and provide a high-level CX (Customer Experience) evaluation. Focus ONLY on these overall aspects:
 
-1. Overall Website Performance
-   - Conversion Rate
-   - Average Order Value
-   - Customer Acquisition Cost
-   - Customer Lifetime Value
-   - Site Speed & Performance
-   - Mobile Responsiveness
+1. Visual Appeal & Branding (0-100): Assess the overall aesthetic, color scheme, typography, and how well the brand identity is communicated.
+2. User Journey (0-100): Evaluate the clarity of the path from landing page to checkout, including product discovery and information accessibility.
+3. Intuitive Navigation (0-100): Judge the ease of finding products, using search functionality, and moving between different sections of the site.
+4. Visual Hierarchy (0-100): Analyze how well the layout guides the user's attention to important elements and facilitates easy scanning of content.
+5. Value Proposition (0-100): Assess how clearly and convincingly the site communicates its unique selling points and benefits to the customer.
+6. Call to Action (0-100): Evaluate the prominence, clarity, and persuasiveness of CTAs throughout the site.
 
-2. Page-by-Page Analysis
-   - Homepage
-   - Product Listing Pages
-   - Product Detail Pages
-   - Shopping Cart
-   - Checkout Process
-
-For each aspect of the overall website performance, provide:
+For each aspect, provide:
 1. A score out of 100
-2. A rationale for the score, including a benchmark comparison
+2. A rationale for the score (2-3 sentences)
 3. Three strengths
 4. Three weaknesses
-
-For each page type, analyze:
-1. Bounce Rate
-2. Exit Rate
-3. Time on Page
-4. Page-Specific Conversion Rate
-5. User Flow and Navigation
-6. Content Quality and Relevance
-7. Call-to-Action Effectiveness
-
-Use the following guidelines for balanced scoring:
-
-- Visual Appeal & Branding (0-100): Assess the overall aesthetic, color scheme, typography, and how well the brand identity is communicated.
-- User Journey (0-100): Evaluate the clarity of the path from landing page to checkout, including product discovery and information accessibility.
-- Intuitive Navigation (0-100): Judge the ease of finding products, using search functionality, and moving between different sections of the site.
-- Visual Hierarchy (0-100): Analyze how well the layout guides the user's attention to important elements and facilitates easy scanning of content.
-- Value Proposition (0-100): Assess how clearly and convincingly the site communicates its unique selling points and benefits to the customer.
-- Call to Action (0-100): Evaluate the prominence, clarity, and persuasiveness of CTAs throughout the site.
 
 Aim for a balanced assessment. Recognize strengths where they exist, but also identify areas for improvement. Use the full range of scores as appropriate, avoiding extremes unless truly warranted.
 
@@ -499,8 +473,6 @@ Website Content:
 ${contentForAnalysis}
 
 Format your response exactly like this:
-
-Overall CX Score: [average of all scores]
 
 Visual Appeal & Branding: [score]/100
 Rationale: [2-3 sentences explaining the score and comparing to industry benchmark]
@@ -514,54 +486,6 @@ Weaknesses:
 • [Weakness 3]
 
 [Repeat the above format for the remaining aspects]
-
-Page-by-Page Analysis:
-
-Homepage:
-• Bounce Rate: [percentage]
-• Exit Rate: [percentage]
-• Time on Page: [seconds]
-• Conversion Rate: [percentage]
-• Strengths: [list 3 strengths]
-• Weaknesses: [list 3 weaknesses]
-• Recommendations: [list 3 specific recommendations]
-
-Product Listing Pages:
-• Bounce Rate: [percentage]
-• Exit Rate: [percentage]
-• Time on Page: [seconds]
-• Conversion Rate: [percentage]
-• Strengths: [list 3 strengths]
-• Weaknesses: [list 3 weaknesses]
-• Recommendations: [list 3 specific recommendations]
-
-Product Detail Pages:
-• Bounce Rate: [percentage]
-• Exit Rate: [percentage]
-• Time on Page: [seconds]
-• Conversion Rate: [percentage]
-• Strengths: [list 3 strengths]
-• Weaknesses: [list 3 weaknesses]
-• Recommendations: [list 3 specific recommendations]
-
-Shopping Cart:
-• Bounce Rate: [percentage]
-• Exit Rate: [percentage]
-• Time on Page: [seconds]
-• Conversion Rate: [percentage]
-• Strengths: [list 3 strengths]
-• Weaknesses: [list 3 weaknesses]
-• Recommendations: [list 3 specific recommendations]
-
-Checkout Process:
-• Bounce Rate: [percentage]
-• Exit Rate: [percentage]
-• Time on Page: [seconds]
-• Conversion Rate: [percentage]
-• Strengths: [list 3 strengths]
-• Weaknesses: [list 3 weaknesses]
-• Recommendations: [list 3 specific recommendations]
-
 
 Detailed Summary:
 [Provide a comprehensive 5-7 sentence summary of the website's overall CX, highlighting key strengths, weaknesses, and areas for improvement. Include insights on how these factors collectively impact the user experience and potential conversion rates. Each sentence should be on a new line.]
