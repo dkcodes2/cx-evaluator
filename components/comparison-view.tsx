@@ -50,7 +50,7 @@ export function ComparisonView({
               <ArrowUp className="h-4 w-4 text-green-600" />
             ) : (
               <ArrowDown className="h-4 w-4 text-red-600" />
-            )\
+            )
           ) : (
             <Minus className="h-4 w-4 text-gray-500" />
           )}
