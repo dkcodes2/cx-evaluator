@@ -26,6 +26,24 @@ interface ActionableItem {
   action: string
 }
 
+interface PageAnalysisData {
+  pageUrl: string
+  pageType: string
+  score: number
+  scoreReasoning: string
+  strengths: string[]
+  weaknesses: string[]
+  recommendations: Array<{
+    suggestion: string
+    reasoning: string
+    referenceWebsite: {
+      name: string
+      url: string
+      description: string
+    }
+  }>
+}
+
 const componentNames = [
   "Visual Appeal & Branding",
   "User Journey",
@@ -46,7 +64,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [analysisAttempts, setAnalysisAttempts] = useState(0)
   const [partialResults, setPartialResults] = useState<boolean[]>([])
-  const [pageAnalysisData, setPageAnalysisData] = useState<any[]>([])
+  const [pageAnalysisData, setPageAnalysisData] = useState<PageAnalysisData[]>([])
   const [isLoadingPageAnalysis, setIsLoadingPageAnalysis] = useState(false)
 
   const getScoreColorClass = (score: number | null) => {
@@ -101,10 +119,14 @@ export default function Home() {
     try {
       setIsLoadingPageAnalysis(true)
       const data = await generatePageAnalysisData(url)
-      if (data && !data.error) {
+
+      if (data && Array.isArray(data) && data.length > 0) {
+        console.log("Page analysis data loaded:", data)
         setPageAnalysisData(data)
-      } else {
+      } else if (data && data.error) {
         console.error("Error loading page analysis data:", data.error)
+      } else {
+        console.error("Invalid page analysis data format:", data)
       }
     } catch (error) {
       console.error("Error loading page analysis data:", error)

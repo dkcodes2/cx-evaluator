@@ -50,4 +50,3 @@ export function ComparisonView({ componentName, site1Score, site2Score, site1Nam
     </div>
   )
 }
-

@@ -6,70 +6,176 @@ import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/ge
 const cache: { [key: string]: { result: any; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
 
-function cleanAndParseJSON(text: string) {
-  try {
-    // Remove any markdown code block indicators and leading/trailing whitespace
-    text = text.replace(/```json\s*|\s*```/g, "").trim()
-
-    // Find the first '[' and last ']' to extract the JSON array
-    const start = text.indexOf("[")
-    const end = text.lastIndexOf("]")
-
-    if (start === -1 || end === -1) {
-      console.error("Could not find JSON array markers in response")
-      return null
+interface PageAnalysis {
+  pageUrl: string
+  pageType: string
+  score: number
+  scoreReasoning: string
+  strengths: string[]
+  weaknesses: string[]
+  recommendations: Array<{
+    suggestion: string
+    reasoning: string
+    referenceWebsite: {
+      name: string
+      url: string
+      description: string
     }
+  }>
+}
 
-    // Extract just the JSON array
-    let jsonText = text.slice(start, end + 1)
+function parseAnalysisText(text: string, baseUrl: string): PageAnalysis[] {
+  const pageTypes = ["Homepage", "Product Listing", "Product Detail", "Shopping Cart", "Checkout"]
+  const analyses: PageAnalysis[] = []
 
-    // Remove any trailing commas before closing brackets or braces
-    jsonText = jsonText.replace(/,(\s*[\]}])/g, "$1")
+  // Create a regex pattern to match each page section
+  const pageSectionRegex = new RegExp(`(${pageTypes.join("|")}):[\\s\\S]*?(?=(${pageTypes.join("|")}):|\$)`, "g")
 
-    // Attempt to parse the JSON
+  // Find all page sections
+  const pageSections = text.match(pageSectionRegex) || []
+
+  console.log(`Found ${pageSections.length} page sections`)
+
+  pageSections.forEach((section) => {
     try {
-      return JSON.parse(jsonText)
-    } catch (parseError) {
-      console.error("Initial parse failed, attempting to fix truncated JSON")
+      // Determine page type
+      const pageTypeMatch = section.match(new RegExp(`^(${pageTypes.join("|")}):`))
+      if (!pageTypeMatch) return
 
-      // If parsing fails, it might be due to truncation. Let's try to fix it.
-      const objects = jsonText.split(/},\s*{/)
-      const lastObject = objects[objects.length - 1]
+      const pageType = pageTypeMatch[1]
+      console.log(`Processing ${pageType} section`)
 
-      // Check if the last object is complete
-      if (!lastObject.endsWith("}]")) {
-        // Remove the incomplete object
-        objects.pop()
-        jsonText = objects.join("},{") + "}]"
+      // Extract page URL
+      let pageUrl = section.match(/Page URL:\s*(.*?)(?=\n|$)/)?.[1]?.trim() || baseUrl
+      if (!pageUrl.startsWith("http")) {
+        pageUrl = baseUrl + (pageUrl.startsWith("/") ? pageUrl : "/" + pageUrl)
       }
 
-      // Try parsing again
-      return JSON.parse(jsonText)
+      // Extract score
+      const scoreMatch = section.match(/Overall Score:\s*(\d+)/)
+      const score = scoreMatch ? Number.parseInt(scoreMatch[1]) : 0
+
+      // Extract score reasoning
+      const reasoningMatch = section.match(/Score Reasoning:\s*([\s\S]*?)(?=\nStrengths:|\n\n)/)
+      const scoreReasoning = reasoningMatch ? reasoningMatch[1].trim() : ""
+
+      // Extract strengths
+      const strengthsMatch = section.match(/Strengths:\s*([\s\S]*?)(?=\nWeaknesses:|\n\n)/)
+      const strengthsText = strengthsMatch ? strengthsMatch[1] : ""
+      const strengths = strengthsText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s.startsWith("•") || s.startsWith("-") || s.startsWith("*"))
+        .map((s) => s.replace(/^[•\-*]\s*/, "").replace(/\*\*(.*?)\*\*/g, "$1"))
+
+      // Extract weaknesses
+      const weaknessesMatch = section.match(/Weaknesses:\s*([\s\S]*?)(?=\nRecommendations:|\n\n)/)
+      const weaknessesText = weaknessesMatch ? weaknessesMatch[1] : ""
+      const weaknesses = weaknessesText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s.startsWith("•") || s.startsWith("-") || s.startsWith("*"))
+        .map((s) => s.replace(/^[•\-*]\s*/, "").replace(/\*\*(.*?)\*\*/g, "$1"))
+
+      // Extract recommendations
+      const recommendationsMatch = section.match(/Recommendations:\s*([\s\S]*?)(?=\n\n\w|$)/)
+      const recommendationsText = recommendationsMatch ? recommendationsMatch[1] : ""
+
+      // Split recommendations by numbered items
+      const recommendationItems = recommendationsText.split(/\d+\.\s+/).filter(Boolean)
+
+      const recommendations = recommendationItems.map((item) => {
+        const lines = item
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+
+        const suggestion = lines[0]?.replace(/\*\*(.*?)\*\*/g, "$1") || ""
+
+        // Find reasoning line
+        const reasoningLine = lines.find((line) => line.startsWith("Reasoning:")) || ""
+        const reasoning = reasoningLine
+          .replace("Reasoning:", "")
+          .trim()
+          .replace(/\*\*(.*?)\*\*/g, "$1")
+
+        // Extract reference website details
+        const nameMatch = item.match(/Name:\s*(.*?)(?=\n|$)/)
+        const urlMatch = item.match(/URL:\s*(.*?)(?=\n|$)/)
+        const descMatch = item.match(/Description:\s*(.*?)(?=\n|$)/)
+
+        return {
+          suggestion,
+          reasoning,
+          referenceWebsite: {
+            name: nameMatch ? nameMatch[1].trim().replace(/\*\*(.*?)\*\*/g, "$1") : "",
+            url: urlMatch ? urlMatch[1].trim() : "",
+            description: descMatch ? descMatch[1].trim().replace(/\*\*(.*?)\*\*/g, "$1") : "",
+          },
+        }
+      })
+
+      analyses.push({
+        pageUrl,
+        pageType,
+        score,
+        scoreReasoning,
+        strengths: strengths.length > 0 ? strengths : ["No strengths provided"],
+        weaknesses: weaknesses.length > 0 ? weaknesses : ["No weaknesses provided"],
+        recommendations:
+          recommendations.length > 0
+            ? recommendations
+            : [
+                {
+                  suggestion: "No recommendations provided",
+                  reasoning: "",
+                  referenceWebsite: { name: "", url: "", description: "" },
+                },
+              ],
+      })
+    } catch (error) {
+      console.error(`Error parsing section:`, error)
     }
-  } catch (error) {
-    console.error("Error in cleanAndParseJSON:", error)
-    return null
-  }
+  })
+
+  // If we didn't find all page types, generate placeholders for the missing ones
+  pageTypes.forEach((pageType) => {
+    if (!analyses.some((a) => a.pageType === pageType)) {
+      analyses.push({
+        pageUrl: baseUrl + (pageType === "Homepage" ? "" : "/" + pageType.toLowerCase().replace(" ", "-")),
+        pageType,
+        score: 0,
+        scoreReasoning: "No data available for this page type",
+        strengths: ["No data available"],
+        weaknesses: ["No data available"],
+        recommendations: [
+          {
+            suggestion: "No recommendations available",
+            reasoning: "",
+            referenceWebsite: { name: "", url: "", description: "" },
+          },
+        ],
+      })
+    }
+  })
+
+  return analyses
 }
 
 export async function generatePageAnalysisData(url: string) {
   console.log(`Generating page analysis data for URL: ${url}`)
   try {
     // Check cache first
-    const cacheKey = `page_analysis_${url}`
-    if (cache[cacheKey] && Date.now() - cache[cacheKey].timestamp < CACHE_DURATION) {
+    if (cache[url] && Date.now() - cache[url].timestamp < CACHE_DURATION) {
       console.log(`Returning cached page analysis data for ${url}`)
-      return cache[cacheKey].result
+      return cache[url].result
     }
 
     const apiKey = process.env.GOOGLE_API_KEY
 
     if (!apiKey) {
       console.error("GOOGLE_API_KEY is not configured in environment variables")
-      return {
-        error: "API_KEY_MISSING",
-        message: "GOOGLE_API_KEY is not configured in environment variables",
-      }
+      return []
     }
 
     const genAI = new GoogleGenerativeAI(apiKey)
@@ -102,40 +208,87 @@ export async function generatePageAnalysisData(url: string) {
     ]
 
     const prompt = `
-Generate a JSON array containing page analysis data for the e-commerce website at ${url}.
+Generate a detailed page analysis for the e-commerce website at ${url}.
 Focus on these page types: Homepage, Product Listing, Product Detail, Shopping Cart, and Checkout.
 
-Each object in the array should follow this EXACT structure, with NO additional fields:
-{
-  "pageUrl": "string",
-  "pageType": "string",
-  "score": number,
-  "scoreReasoning": "string",
-  "strengths": ["string", "string", "string"],
-  "weaknesses": ["string", "string", "string"],
-  "recommendations": [
-    {
-      "suggestion": "string",
-      "reasoning": "string",
-      "referenceWebsite": {
-        "name": "string",
-        "url": "string",
-        "description": "string"
-      }
-    },
-    {
-      "suggestion": "string",
-      "reasoning": "string",
-      "referenceWebsite": {
-        "name": "string",
-        "url": "string",
-        "description": "string"
-      }
-    }
-  ]
-}
+For each page type, provide the following information:
+1. Page URL (use ${url} as the base URL)
+2. Page Type
+3. Overall Score (0-100)
+4. Score Reasoning (2-3 sentences)
+5. Three Strengths
+6. Three Weaknesses
+7. Two Recommendations, each including:
+   - Suggestion
+   - Reasoning
+   - Reference Website (name, URL, and brief description)
 
-Respond ONLY with the JSON array. Do not include any explanation or markdown formatting.`
+Format your response as a detailed analysis. Do not use JSON format. Ensure each section is clearly labeled and separated.
+
+IMPORTANT: Do not use markdown formatting like **bold** or *italic*. Use plain text only.
+
+Example format:
+
+Homepage:
+Page URL: ${url}
+Page Type: Homepage
+Overall Score: 85
+Score Reasoning: The homepage effectively showcases the brand and key products. It has a clean design and clear navigation. However, there's room for improvement in mobile responsiveness and call-to-action placement.
+Strengths:
+• Strong brand presentation
+• Clear product categories
+• Engaging hero image
+Weaknesses:
+• Limited mobile optimization
+• Cluttered footer
+• Lack of personalized content
+Recommendations:
+1. Improve mobile responsiveness
+   Reasoning: A significant portion of e-commerce traffic comes from mobile devices. Enhancing mobile experience can increase conversion rates.
+   Reference Website:
+   Name: Etsy
+   URL: https://www.etsy.com
+   Description: Excellent example of a mobile-friendly e-commerce homepage
+
+2. Streamline footer content
+   Reasoning: A cleaner footer can improve navigation and reduce cognitive load for users.
+   Reference Website:
+   Name: Apple
+   URL: https://www.apple.com
+   Description: Demonstrates a well-organized and minimal footer design
+
+Product Listing:
+Page URL: ${url}/collections
+Page Type: Product Listing
+Overall Score: 80
+Score Reasoning: The product listing pages provide good filtering options and clear product information. However, there are opportunities to improve sorting options and visual hierarchy.
+Strengths:
+• Effective filtering options
+• Clear product thumbnails
+• Consistent layout
+Weaknesses:
+• Limited sorting options
+• Pagination could be improved
+• Lack of quick view functionality
+Recommendations:
+1. Add more sorting options
+   Reasoning: Additional sorting options like "Best Selling" or "New Arrivals" can help users find relevant products faster.
+   Reference Website:
+   Name: Nordstrom
+   URL: https://www.nordstrom.com
+   Description: Offers comprehensive sorting options that enhance product discovery
+
+2. Implement quick view functionality
+   Reasoning: Quick view allows users to preview product details without leaving the listing page, improving browsing efficiency.
+   Reference Website:
+   Name: Sephora
+   URL: https://www.sephora.com
+   Description: Features an effective quick view implementation that shows key product details
+
+[Continue with similar detailed analyses for Product Detail, Shopping Cart, and Checkout pages]
+
+Ensure that you provide a comprehensive analysis for all five page types mentioned above.
+`
 
     console.log("Sending page analysis prompt to Gemini API")
     const result = await model.generateContent({
@@ -153,58 +306,38 @@ Respond ONLY with the JSON array. Do not include any explanation or markdown for
 
     console.log("Raw API response:", text)
 
-    // Try to parse the JSON with our new cleaning function
-    const jsonData = cleanAndParseJSON(text)
+    // Parse the text into structured data
+    const parsedData = parseAnalysisText(text, url)
 
-    if (!jsonData || !Array.isArray(jsonData)) {
-      throw new Error("Failed to parse valid JSON data from the API response")
-    }
-
-    // Validate and sanitize the parsed data
-    const validatedData = jsonData.map((page: any) => ({
-      pageUrl: typeof page.pageUrl === "string" ? page.pageUrl : "",
-      pageType: typeof page.pageType === "string" ? page.pageType : "",
-      score: typeof page.score === "number" ? page.score : 0,
-      scoreReasoning: typeof page.scoreReasoning === "string" ? page.scoreReasoning : "",
-      strengths: Array.isArray(page.strengths)
-        ? page.strengths.filter((s: any) => typeof s === "string").slice(0, 3)
-        : [],
-      weaknesses: Array.isArray(page.weaknesses)
-        ? page.weaknesses.filter((w: any) => typeof w === "string").slice(0, 3)
-        : [],
-      recommendations: Array.isArray(page.recommendations)
-        ? page.recommendations.slice(0, 2).map((rec: any) => ({
-            suggestion: typeof rec.suggestion === "string" ? rec.suggestion : "",
-            reasoning: typeof rec.reasoning === "string" ? rec.reasoning : "",
-            referenceWebsite: {
-              name: typeof rec.referenceWebsite?.name === "string" ? rec.referenceWebsite.name : "",
-              url: typeof rec.referenceWebsite?.url === "string" ? rec.referenceWebsite.url : "",
-              description:
-                typeof rec.referenceWebsite?.description === "string" ? rec.referenceWebsite.description : "",
-            },
-          }))
-        : [],
-    }))
+    console.log(`Parsed ${parsedData.length} page analyses`)
 
     // Cache the result
-    cache[cacheKey] = { result: validatedData, timestamp: Date.now() }
+    cache[url] = { result: parsedData, timestamp: Date.now() }
 
     console.log(`Page analysis data generated for URL: ${url}`)
-    return validatedData
+    return parsedData
   } catch (error) {
     console.error(`Error generating page analysis data for ${url}:`, error)
-    if (error instanceof Error) {
-      return {
-        error: "GENERATION_ERROR",
-        message: `An error occurred while generating page analysis data: ${error.message}`,
-        details: error.stack,
-      }
-    }
-    return {
-      error: "UNKNOWN_ERROR",
-      message: "An unexpected error occurred while generating page analysis data.",
-      details: String(error),
-    }
+    // Return placeholder data for all page types
+    return ["Homepage", "Product Listing", "Product Detail", "Shopping Cart", "Checkout"].map((pageType) => ({
+      pageUrl: url + (pageType === "Homepage" ? "" : "/" + pageType.toLowerCase().replace(" ", "-")),
+      pageType,
+      score: 0,
+      scoreReasoning: "An error occurred while generating analysis data.",
+      strengths: ["Data unavailable due to error"],
+      weaknesses: ["Data unavailable due to error"],
+      recommendations: [
+        {
+          suggestion: "Try analyzing the website again",
+          reasoning: "Temporary error occurred during analysis",
+          referenceWebsite: {
+            name: "Tata CX Support",
+            url: "https://example.com/support",
+            description: "Contact support if the issue persists",
+          },
+        },
+      ],
+    }))
   }
 }
 
