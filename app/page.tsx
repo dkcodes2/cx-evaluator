@@ -159,9 +159,22 @@ export default function Home() {
       const results = await Promise.all(
         urlsToAnalyze.map(async (url, index) => {
           console.log(`Starting analysis for URL ${index + 1}:`, url)
-          const resultString = await analyzeWebsite(url)
-          console.log(`Raw result for URL ${index + 1}:`, resultString)
-          return { url, resultString }
+          try {
+            const resultString = await analyzeWebsite(url)
+            console.log(`Raw result for URL ${index + 1}:`, resultString)
+            return { url, resultString, error: null }
+          } catch (error) {
+            console.error(`Error analyzing URL ${index + 1}:`, error)
+            return {
+              url,
+              resultString: JSON.stringify({
+                error: "ANALYSIS_ERROR",
+                message: `Failed to analyze website. This may be due to network restrictions.`,
+                details: error.message || "Unknown error",
+              }),
+              error,
+            }
+          }
         }),
       )
 

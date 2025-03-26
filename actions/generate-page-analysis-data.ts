@@ -35,6 +35,7 @@ interface PageAnalysis {
   }>
 }
 
+// Update the getActualPageUrls function to handle fetch failures
 async function getActualPageUrls(baseUrl: string) {
   try {
     console.log(`Getting actual page URLs for ${baseUrl}`)
@@ -47,6 +48,17 @@ async function getActualPageUrls(baseUrl: string) {
       "Product Detail": null,
       "Shopping Cart": null,
       Checkout: null,
+    }
+
+    // Check if we have valid website data
+    if (
+      !websiteData ||
+      !websiteData.homepage ||
+      !websiteData.homepage.title ||
+      websiteData.homepage.title === "Not available"
+    ) {
+      console.log("Website data is incomplete or invalid, returning only homepage URL")
+      return pageUrls
     }
 
     // Find a category page for Product Listing

@@ -10,24 +10,42 @@ import * as cheerio from "cheerio"
 const cache: { [url: string]: { result: string; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
 
+// Update the fetchPage function to add better error handling and debugging
 async function fetchPage(url: string) {
   console.log(`Fetching page: ${url}`)
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-      Connection: "keep-alive",
-      "Upgrade-Insecure-Requests": "1",
-      "Cache-Control": "no-cache",
-      Pragma: "no-cache",
-    },
-  })
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        Connection: "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      console.error(`HTTP error! status: ${response.status}, statusText: ${response.statusText}`)
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const html = await response.text()
+    console.log(`Successfully fetched page: ${url}, content length: ${html.length}`)
+    return html
+  } catch (error) {
+    console.error(`Error fetching page ${url}:`, error)
+    // Return a minimal HTML structure instead of throwing an error
+    return `<!DOCTYPE html><html><head><title>Fetch Failed</title></head><body><h1>Failed to fetch content</h1><p>Error: ${error.message}</p></body></html>`
   }
-  return await response.text()
 }
 
 function findNavigationElements($: cheerio.CheerioAPI): string[] {
@@ -59,7 +77,7 @@ function findNavigationElements($: cheerio.CheerioAPI): string[] {
   ]
 
   navigationSelectors.forEach((selector) => {
-    $(selector).each((_: any, el: any) => {
+    $(selector).each((_, el) => {
       const $el = $(el)
       const href = $el.attr("href")
       const text = $el.text().trim()
@@ -141,7 +159,7 @@ function findProductElements($: cheerio.CheerioAPI): string[] {
 
   // First try the selectors
   productSelectors.forEach((selector) => {
-    $(selector).each((_: any, el: any) => {
+    $(selector).each((_, el) => {
       const href = $(el).attr("href")
       if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
         links.add(href)
@@ -151,7 +169,7 @@ function findProductElements($: cheerio.CheerioAPI): string[] {
 
   // If we still don't have enough product links, try to find links with product-related text
   if (links.size < 3) {
-    $("a").each((_: any, el: any) => {
+    $("a").each((_, el) => {
       const $el = $(el)
       const href = $el.attr("href")
       const text = $el.text().toLowerCase().trim()
@@ -178,7 +196,7 @@ function findProductElements($: cheerio.CheerioAPI): string[] {
 
   // Look for image links that might be product links
   if (links.size < 3) {
-    $("a:has(img)").each((_: any, el: any) => {
+    $("a:has(img)").each((_, el) => {
       const $el = $(el)
       const href = $el.attr("href")
 
@@ -315,8 +333,6 @@ function findCartIcon($: cheerio.CheerioAPI): string | null {
 
     // Data attributes
     '[data-testid*="cart"]',
-    '[data-testid*="basket"]',
-    '[data-testid*="bag"]',
     '[data-test*="cart"]',
     '[data-component*="cart"]',
     '[data-role*="cart"]',
@@ -367,7 +383,7 @@ function findCartIcon($: cheerio.CheerioAPI): string | null {
   }
 
   // If no direct cart link found, look for text-based links
-  const cartTextLinks = $("a").filter((_: any, el: any) => {
+  const cartTextLinks = $("a").filter((_, el) => {
     const text = $(el).text().toLowerCase().trim()
     return (
       text === "cart" ||
@@ -474,7 +490,7 @@ function findCheckoutButton($: cheerio.CheerioAPI): string | null {
   }
 
   // If no direct checkout element found, look for text-based links
-  const checkoutTextLinks = $("a").filter((_: any, el: any) => {
+  const checkoutTextLinks = $("a").filter((_, el) => {
     const text = $(el).text().toLowerCase().trim()
     return (
       text === "checkout" ||
@@ -500,22 +516,42 @@ function findCheckoutButton($: cheerio.CheerioAPI): string | null {
 // Update the simulateUserFlow function to use the new findCheckoutButton function
 // and improve cart/checkout detection
 // Update the simulateUserFlow function to improve product page exploration
+// Update the beginning of simulateUserFlow function to handle fetch failures better
 export async function simulateUserFlow(baseUrl: string) {
   console.log(`Simulating user flow for: ${baseUrl}`)
-  const data: any = {}
+  const data: any = {
+    homepage: {
+      title: "Not available",
+      description: "Not available",
+      h1Tags: [],
+    },
+    categories: [],
+    products: [],
+  }
 
   try {
     // Step 1: Visit homepage
     const homepageHtml = await fetchPage(baseUrl)
+
+    // Check if we got a valid response or our fallback HTML
+    if (homepageHtml.includes("<title>Fetch Failed</title>")) {
+      console.log("Failed to fetch homepage, using minimal data")
+      // Return minimal data structure instead of throwing an error
+      return data
+    }
+
     const $homepage = cheerio.load(homepageHtml)
 
     data.homepage = {
-      title: $homepage("title").text().trim(),
-      description: $homepage('meta[name="description"]').attr("content") || "",
-      h1Tags: $homepage("h1")
-        .map((_: any, el: any) => $homepage(el).text().trim())
-        .get(),
+      title: $homepage("title").text().trim() || "No title found",
+      description: $homepage('meta[name="description"]').attr("content") || "No description found",
+      h1Tags:
+        $homepage("h1")
+          .map((_, el) => $homepage(el).text().trim())
+          .get() || [],
     }
+
+    // Rest of the function remains the same...
 
     // Step 2: Explore multiple category pages
     const categoryLinks = findNavigationElements($homepage)
@@ -573,7 +609,7 @@ export async function simulateUserFlow(baseUrl: string) {
       console.log(`Not enough product links found, trying more aggressive approach`)
 
       // Try to find links that might be product links based on URL patterns
-      $homepage("a").each((_: any, el: any) => {
+      $homepage("a").each((_, el) => {
         const href = $homepage(el).attr("href")
         if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
           // Check for common product URL patterns
@@ -696,7 +732,7 @@ export async function simulateUserFlow(baseUrl: string) {
             steps: $checkout(
               '[class*="checkout-step"], [class*="step"], [class*="progress"], [class*="stage"], ol li, ul[class*="step"] li',
             )
-              .map((_: any, el: any) => $checkout(el).text().trim())
+              .map((_, el) => $checkout(el).text().trim())
               .get(),
             hasPaymentForm:
               $checkout(
@@ -723,7 +759,7 @@ export async function simulateUserFlow(baseUrl: string) {
               steps: $checkout(
                 '[class*="checkout-step"], [class*="step"], [class*="progress"], [class*="stage"], ol li, ul[class*="step"] li',
               )
-                .map((_: any, el: any) => $checkout(el).text().trim())
+                .map((_, el) => $checkout(el).text().trim())
                 .get(),
               hasPaymentForm:
                 $checkout(
@@ -756,7 +792,7 @@ export async function simulateUserFlow(baseUrl: string) {
             steps: $checkout(
               '[class*="checkout-step"], [class*="step"], [class*="progress"], [class*="stage"], ol li, ul[class*="step"] li',
             )
-              .map((_: any, el: any) => $checkout(el).text().trim())
+              .map((_, el) => $checkout(el).text().trim())
               .get(),
             hasPaymentForm:
               $checkout(
@@ -790,6 +826,7 @@ function parseError(error: any): string {
   return String(error)
 }
 
+// Update the analyzeWebsite function to handle incomplete website data
 export async function analyzeWebsite(url: string) {
   console.log(`Starting analysis for URL: ${url}`)
   try {
@@ -814,35 +851,55 @@ export async function analyzeWebsite(url: string) {
     const websiteData = await simulateUserFlow(url)
     console.log(`User flow simulation completed for ${url}`)
 
+    // Check if websiteData has the required properties
+    if (!websiteData || !websiteData.homepage) {
+      console.error("Website data is incomplete:", websiteData)
+      return JSON.stringify({
+        error: "INCOMPLETE_DATA",
+        message:
+          "Failed to retrieve complete website data. This may be due to network restrictions or firewall settings.",
+        details:
+          "The application was unable to access the website. If you're on a corporate network, try using a personal device or network without firewall restrictions.",
+      })
+    }
+
     const contentForAnalysis = `
 Website URL: ${url}
-Homepage Title: ${websiteData.homepage.title}
-Homepage Description: ${websiteData.homepage.description}
-Homepage H1 Tags: ${websiteData.homepage.h1Tags.join(", ")}
+Homepage Title: ${websiteData.homepage?.title || "Not available"}
+Homepage Description: ${websiteData.homepage?.description || "Not available"}
+Homepage H1 Tags: ${websiteData.homepage?.h1Tags?.join(", ") || "Not available"}
 
 Categories:
-${websiteData.categories
-  .map(
-    (category: { url: any; title: any; productCount: any; description: any; }) => `
-  URL: ${category.url}
-  Title: ${category.title}
-  Product Count: ${category.productCount}
-  Description: ${category.description}
+${
+  websiteData.categories && websiteData.categories.length > 0
+    ? websiteData.categories
+        .map(
+          (category) => `
+  URL: ${category.url || "Not available"}
+  Title: ${category.title || "Not available"}
+  Product Count: ${category.productCount || "Not available"}
+  Description: ${category.description || "Not available"}
 `,
-  )
-  .join("")}
+        )
+        .join("")
+    : "No categories found"
+}
 
 Products:
-${websiteData.products
-  .map(
-    (product: { url: any; title: any; price: any; description: any; }) => `
-  URL: ${product.url}
-  Title: ${product.title}
-  Price: ${product.price}
-  Description: ${product.description}
+${
+  websiteData.products && websiteData.products.length > 0
+    ? websiteData.products
+        .map(
+          (product) => `
+  URL: ${product.url || "Not available"}
+  Title: ${product.title || "Not available"}
+  Price: ${product.price || "Not available"}
+  Description: ${product.description || "Not available"}
 `,
-  )
-  .join("")}
+        )
+        .join("")
+    : "No products found"
+}
 
 Cart Page:
 URL: ${websiteData.cart?.url || "N/A"}
@@ -852,7 +909,7 @@ Item Count: ${websiteData.cart?.itemCount || "N/A"}
 Checkout Page:
 URL: ${websiteData.checkout?.url || "N/A"}
 Title: ${websiteData.checkout?.title || "N/A"}
-Steps: ${websiteData.checkout?.steps.join(", ") || "N/A"}
+Steps: ${websiteData.checkout?.steps?.join(", ") || "N/A"}
 `.trim()
 
     console.log(`Content prepared for analysis:`, contentForAnalysis)
