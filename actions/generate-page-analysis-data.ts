@@ -53,8 +53,8 @@ async function getActualPageUrls(baseUrl: string) {
     if (websiteData.categories && websiteData.categories.length > 0) {
       // Try to find a category with products
       const categoriesWithProducts = websiteData.categories
-        .filter((cat: { productCount: number }) => cat.productCount > 0)
-        .sort((a: { productCount: number }, b: { productCount: number }) => b.productCount - a.productCount)
+        .filter((cat) => cat.productCount > 0)
+        .sort((a, b) => b.productCount - a.productCount)
 
       if (categoriesWithProducts.length > 0) {
         const categoryUrl = categoriesWithProducts[0].url
@@ -71,7 +71,7 @@ async function getActualPageUrls(baseUrl: string) {
     if (websiteData.products && websiteData.products.length > 0) {
       // Try to find a product with price and description
       const productsWithDetails = websiteData.products.filter(
-        (product: { price: string; description: string }) => product.price && product.price !== "N/A" && product.description && product.description !== "N/A",
+        (product) => product.price && product.price !== "N/A" && product.description && product.description !== "N/A",
       )
 
       if (productsWithDetails.length > 0) {
@@ -511,6 +511,7 @@ function parseAnalysisText(
   return analyses
 }
 
+// Add more detailed error logging to the generatePageAnalysisData function
 export async function generatePageAnalysisData(url: string) {
   console.log(`Generating page analysis data for URL: ${url}`)
   try {
@@ -521,7 +522,22 @@ export async function generatePageAnalysisData(url: string) {
     }
 
     // Get actual page URLs first
-    const actualPageUrls = await getActualPageUrls(url)
+    console.log(`Getting actual page URLs for ${url}`)
+    let actualPageUrls
+    try {
+      actualPageUrls = await getActualPageUrls(url)
+      console.log(`Found actual page URLs:`, actualPageUrls)
+    } catch (error) {
+      console.error(`Error getting actual page URLs:`, error)
+      actualPageUrls = {
+        Homepage: url,
+        "Product Listing": null,
+        "Product Detail": null,
+        "Shopping Cart": null,
+        Checkout: null,
+      }
+      console.log(`Using fallback page URLs:`, actualPageUrls)
+    }
 
     const apiKey = process.env.GOOGLE_API_KEY
 
@@ -530,14 +546,15 @@ export async function generatePageAnalysisData(url: string) {
       return []
     }
 
+    console.log(`Initializing Google Generative AI with API key (length: ${apiKey.length})`)
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-thinking-exp-01-21" })
 
     const generationConfig = {
-      temperature: 0.7, // Reduced temperature for more consistent formatting
+      temperature: 0.7,
       topK: 1,
       topP: 1,
-      maxOutputTokens: 4096, // Increased token limit for more detailed analysis
+      maxOutputTokens: 4096,
     }
 
     const safetySettings = [
@@ -559,7 +576,7 @@ export async function generatePageAnalysisData(url: string) {
       },
     ]
 
-    // Update the prompt to include the actual page URLs we found and emphasize consistent formatting
+    // Prepare the prompt (existing code)
     const prompt = `
 Generate a detailed page analysis for the e-commerce website at ${url}.
 Focus on these page types with their actual URLs:
@@ -651,12 +668,25 @@ Overall Score: 80
 [Continue with similar detailed analyses for Product Detail, Shopping Cart, and Checkout pages]
 `
 
+    console.log(`Prompt prepared (length: ${prompt.length} characters)`)
     console.log("Sending page analysis prompt to Gemini API")
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig,
-      safetySettings,
-    })
+
+    let result
+    try {
+      result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig,
+        safetySettings,
+      })
+      console.log("Successfully received response from Gemini API")
+    } catch (error) {
+      console.error("Error calling Gemini API:", error)
+      if (error instanceof Error) {
+        console.error(`Error name: ${error.name}, message: ${error.message}`)
+        console.error(`Error stack: ${error.stack}`)
+      }
+      throw error
+    }
 
     const response = await result.response
     const text = response.text()
