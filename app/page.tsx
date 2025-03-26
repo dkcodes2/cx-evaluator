@@ -159,22 +159,9 @@ export default function Home() {
       const results = await Promise.all(
         urlsToAnalyze.map(async (url, index) => {
           console.log(`Starting analysis for URL ${index + 1}:`, url)
-          try {
-            const resultString = await analyzeWebsite(url)
-            console.log(`Raw result for URL ${index + 1}:`, resultString)
-            return { url, resultString, error: null }
-          } catch (error) {
-            console.error(`Error analyzing URL ${index + 1}:`, error)
-            return {
-              url,
-              resultString: JSON.stringify({
-                error: "ANALYSIS_ERROR",
-                message: `Failed to analyze website. This may be due to network restrictions.`,
-                details: error.message || "Unknown error",
-              }),
-              error,
-            }
-          }
+          const resultString = await analyzeWebsite(url)
+          console.log(`Raw result for URL ${index + 1}:`, resultString)
+          return { url, resultString }
         }),
       )
 
@@ -238,16 +225,16 @@ export default function Home() {
                 const strengths = strengthsMatch
                   ? strengthsMatch[1]
                       .split("\n")
-                      .map((s: string) => s.trim())
-                      .filter((s: string) => s.startsWith("•"))
-                      .map((s: string) => s.substring(1).trim())
+                      .map((s) => s.trim())
+                      .filter((s) => s.startsWith("•"))
+                      .map((s) => s.substring(1).trim())
                   : []
                 const weaknesses = weaknessesMatch
                   ? weaknessesMatch[1]
                       .split("\n")
-                      .map((s: string) => s.trim())
-                      .filter((s: string) => s.startsWith("•"))
-                      .map((s: string) => s.substring(1).trim())
+                      .map((s) => s.trim())
+                      .filter((s) => s.startsWith("•"))
+                      .map((s) => s.substring(1).trim())
                   : []
 
                 componentResults.push({
@@ -311,19 +298,19 @@ export default function Home() {
               if (actionableItemsMatch) {
                 const items = actionableItemsMatch[1]
                   .split("\n")
-                  .map((item: string) => item.trim())
-                  .filter((item: string) => item.startsWith("•"))
-                  .map((item: { substring: (arg0: number) => { (): any; new(): any; split: { (arg0: string): { (): any; new(): any; map: { (arg0: (s: any) => any): [any, ...any[]]; new(): any } }; new(): any } } }) => {
+                  .map((item) => item.trim())
+                  .filter((item) => item.startsWith("•"))
+                  .map((item) => {
                     const [category, ...actionParts] = item
                       .substring(1)
                       .split(":")
-                      .map((s: string) => s.trim())
+                      .map((s) => s.trim())
                     return {
                       category,
                       action: actionParts.join(":").trim(),
                     }
                   })
-                  .filter((item: { category: any; action: any }) => item.category && item.action)
+                  .filter((item) => item.category && item.action)
 
                 setActionableItemsArray((prev) => {
                   const newActionableItemsArray = [...prev]

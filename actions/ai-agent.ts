@@ -10,42 +10,24 @@ import * as cheerio from "cheerio"
 const cache: { [url: string]: { result: string; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
 
-// Update the fetchPage function to add better error handling and debugging
 async function fetchPage(url: string) {
   console.log(`Fetching page: ${url}`)
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
-
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        Connection: "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
-      },
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      console.error(`HTTP error! status: ${response.status}, statusText: ${response.statusText}`)
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const html = await response.text()
-    console.log(`Successfully fetched page: ${url}, content length: ${html.length}`)
-    return html
-  } catch (error) {
-    console.error(`Error fetching page ${url}:`, error)
-    // Return a minimal HTML structure instead of throwing an error
-    return `<!DOCTYPE html><html><head><title>Fetch Failed</title></head><body><h1>Failed to fetch content</h1><p>Error: ${error.message}</p></body></html>`
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+      Connection: "keep-alive",
+      "Upgrade-Insecure-Requests": "1",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
   }
+  return await response.text()
 }
 
 function findNavigationElements($: cheerio.CheerioAPI): string[] {
@@ -333,6 +315,8 @@ function findCartIcon($: cheerio.CheerioAPI): string | null {
 
     // Data attributes
     '[data-testid*="cart"]',
+    '[data-testid*="basket"]',
+    '[data-testid*="bag"]',
     '[data-test*="cart"]',
     '[data-component*="cart"]',
     '[data-role*="cart"]',
@@ -516,42 +500,22 @@ function findCheckoutButton($: cheerio.CheerioAPI): string | null {
 // Update the simulateUserFlow function to use the new findCheckoutButton function
 // and improve cart/checkout detection
 // Update the simulateUserFlow function to improve product page exploration
-// Update the beginning of simulateUserFlow function to handle fetch failures better
 export async function simulateUserFlow(baseUrl: string) {
   console.log(`Simulating user flow for: ${baseUrl}`)
-  const data: any = {
-    homepage: {
-      title: "Not available",
-      description: "Not available",
-      h1Tags: [],
-    },
-    categories: [],
-    products: [],
-  }
+  const data: any = {}
 
   try {
     // Step 1: Visit homepage
     const homepageHtml = await fetchPage(baseUrl)
-
-    // Check if we got a valid response or our fallback HTML
-    if (homepageHtml.includes("<title>Fetch Failed</title>")) {
-      console.log("Failed to fetch homepage, using minimal data")
-      // Return minimal data structure instead of throwing an error
-      return data
-    }
-
     const $homepage = cheerio.load(homepageHtml)
 
     data.homepage = {
-      title: $homepage("title").text().trim() || "No title found",
-      description: $homepage('meta[name="description"]').attr("content") || "No description found",
-      h1Tags:
-        $homepage("h1")
-          .map((_, el) => $homepage(el).text().trim())
-          .get() || [],
+      title: $homepage("title").text().trim(),
+      description: $homepage('meta[name="description"]').attr("content") || "",
+      h1Tags: $homepage("h1")
+        .map((_, el) => $homepage(el).text().trim())
+        .get(),
     }
-
-    // Rest of the function remains the same...
 
     // Step 2: Explore multiple category pages
     const categoryLinks = findNavigationElements($homepage)
@@ -826,7 +790,6 @@ function parseError(error: any): string {
   return String(error)
 }
 
-// Update the analyzeWebsite function to handle incomplete website data
 export async function analyzeWebsite(url: string) {
   console.log(`Starting analysis for URL: ${url}`)
   try {
@@ -851,55 +814,35 @@ export async function analyzeWebsite(url: string) {
     const websiteData = await simulateUserFlow(url)
     console.log(`User flow simulation completed for ${url}`)
 
-    // Check if websiteData has the required properties
-    if (!websiteData || !websiteData.homepage) {
-      console.error("Website data is incomplete:", websiteData)
-      return JSON.stringify({
-        error: "INCOMPLETE_DATA",
-        message:
-          "Failed to retrieve complete website data. This may be due to network restrictions or firewall settings.",
-        details:
-          "The application was unable to access the website. If you're on a corporate network, try using a personal device or network without firewall restrictions.",
-      })
-    }
-
     const contentForAnalysis = `
 Website URL: ${url}
-Homepage Title: ${websiteData.homepage?.title || "Not available"}
-Homepage Description: ${websiteData.homepage?.description || "Not available"}
-Homepage H1 Tags: ${websiteData.homepage?.h1Tags?.join(", ") || "Not available"}
+Homepage Title: ${websiteData.homepage.title}
+Homepage Description: ${websiteData.homepage.description}
+Homepage H1 Tags: ${websiteData.homepage.h1Tags.join(", ")}
 
 Categories:
-${
-  websiteData.categories && websiteData.categories.length > 0
-    ? websiteData.categories
-        .map(
-          (category) => `
-  URL: ${category.url || "Not available"}
-  Title: ${category.title || "Not available"}
-  Product Count: ${category.productCount || "Not available"}
-  Description: ${category.description || "Not available"}
+${websiteData.categories
+  .map(
+    (category) => `
+  URL: ${category.url}
+  Title: ${category.title}
+  Product Count: ${category.productCount}
+  Description: ${category.description}
 `,
-        )
-        .join("")
-    : "No categories found"
-}
+  )
+  .join("")}
 
 Products:
-${
-  websiteData.products && websiteData.products.length > 0
-    ? websiteData.products
-        .map(
-          (product) => `
-  URL: ${product.url || "Not available"}
-  Title: ${product.title || "Not available"}
-  Price: ${product.price || "Not available"}
-  Description: ${product.description || "Not available"}
+${websiteData.products
+  .map(
+    (product) => `
+  URL: ${product.url}
+  Title: ${product.title}
+  Price: ${product.price}
+  Description: ${product.description}
 `,
-        )
-        .join("")
-    : "No products found"
-}
+  )
+  .join("")}
 
 Cart Page:
 URL: ${websiteData.cart?.url || "N/A"}
@@ -909,7 +852,7 @@ Item Count: ${websiteData.cart?.itemCount || "N/A"}
 Checkout Page:
 URL: ${websiteData.checkout?.url || "N/A"}
 Title: ${websiteData.checkout?.title || "N/A"}
-Steps: ${websiteData.checkout?.steps?.join(", ") || "N/A"}
+Steps: ${websiteData.checkout?.steps.join(", ") || "N/A"}
 `.trim()
 
     console.log(`Content prepared for analysis:`, contentForAnalysis)
