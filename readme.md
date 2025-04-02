@@ -1,182 +1,197 @@
-# E-Commerce Website Analyzer
+# E-commerce Website Analyzer
 
-This repository contains a **Next.js** application that analyzes one or two e-commerce websites and generates a **Customer Experience (CX)** assessment. It simulates a user journey (home, categories, products, cart, checkout) and then leverages **Google’s Generative AI (Gemini)** to provide a structured analysis of various CX components.
+A powerful tool for analyzing e-commerce websites and providing detailed CX (Customer Experience) evaluations and recommendations.
 
 ---
 
 ## Table of Contents
 
-1. [Features](#features)  
-2. [Technology Stack](#technology-stack)  
-3. [Requirements](#requirements)  
-4. [Setup](#setup)  
-5. [Usage](#usage)  
-6. [Project Structure](#project-structure)  
-7. [Code Flow Overview](#code-flow-overview)  
-8. [Customization](#customization)  
-9. [License](#license)
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [Requirements](#requirements)
+- [Setup](#setup)
+- [Usage](#usage)
+- [Project Structure](#project-structure)
+- [Code Flow Overview](#code-flow-overview)
+- [Customization](#customization)
+  - [Modifying AI Prompts](#modifying-ai-prompts)
+  - [Adding New Analysis Components](#adding-new-analysis-components)
+  - [Extending Web Scraping](#extending-web-scraping)
+- [License](#license)
 
 ---
 
 ## Features
 
-* **Single/Two Website Analysis**: Analyze one site or compare two sites side by side.  
-* **User Flow Simulation**:  
-  * Visits the homepage to gather metadata.  
-  * Looks for category pages (via navigation menus).  
-  * Gathers product links (via product selectors).  
-  * Checks for cart and checkout pages.  
-* **Google Generative AI**: Uses the `@google/generative-ai` library to connect to Google’s Gemini model.  
-* **Scoring by CX Components**:  
-  * Visual Appeal & Branding  
-  * User Journey  
-  * Intuitive Navigation  
-  * Visual Hierarchy  
-  * Value Proposition  
-  * Call to Action  
-* **Actionable Recommendations**: Includes specific to-dos for improving each component.  
-* **In-Memory Caching**: Prevents repeated analyses for the same URL within a 1-hour window.  
-* **UI Components**:  
-  * Progress bars to visualize component scores.  
-  * Accordions for structured breakdown of Strengths, Weaknesses, and Summaries.
+- **Comprehensive E-commerce Analysis**: Evaluates websites across six key CX dimensions: Visual Appeal & Branding, User Journey, Intuitive Navigation, Visual Hierarchy, Value Proposition, and Call to Action.
+- **Single or Comparative Analysis**: Analyze a single website or compare two websites side-by-side.
+- **Page-Specific Analysis**: Detailed evaluation of key e-commerce pages (Homepage, Product Listing, Product Detail, Shopping Cart, Checkout).
+- **Actionable Recommendations**: Provides specific, implementable suggestions to improve website performance.
+- **Visual Scoring**: Clear visual representation of scores with color-coded indicators.
+- **Robust Web Content Fetching**: Advanced techniques to bypass common restrictions like CORS and firewalls.
+- **AI-Powered Insights**: Leverages Google's Generative AI for in-depth analysis and recommendations.
 
 ---
 
 ## Technology Stack
 
-* **React / Next.js** (Client and Server Components)  
-* **TypeScript** (Strongly typed codebase)  
-* **Cheerio** (DOM parsing on fetched HTML)  
-* **`@google/generative-ai`** (API to Google’s Gemini model)  
-* **Tailwind CSS** (Styling)
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+- **UI Components**: shadcn/ui, Lucide React icons
+- **Backend**: Next.js Server Actions
+- **AI Processing**: Python with Google Generative AI
+- **Web Scraping**: Cheerio for HTML parsing
+- **Data Visualization**: Custom progress indicators, circular progress components
+- **Inter-Process Communication**: Node.js child process for JavaScript-Python bridge
 
 ---
 
 ## Requirements
 
-1. **Node.js** (v16+ recommended)  
-2. **NPM** or **Yarn** package manager  
-3. **Google Generative AI Key**:
-   * A valid **`GOOGLE_API_KEY`** for the generative AI integration.  
-4. **Network Connectivity**:
-   * The code fetches external websites; make sure outbound traffic is allowed.
+- Node.js 18.x or higher
+- Python 3.8 or higher
+- Google API Key for Generative AI access
+- npm or yarn package manager
 
 ---
 
 ## Setup
 
-1. **Clone the Repository**:
+1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/ecommerce-analyzer.git
-   cd ecommerce-analyzer
+   git clone https://github.com/your-username/tata-cx.git
+   cd tata-cx
    ```
 
-2. **Install Dependencies**:
+2. **Install JavaScript dependencies**
    ```bash
    npm install
+   # or
+   yarn install
    ```
-   Or, if you use Yarn:
+
+3. **Set up Python environment**
    ```bash
-   yarn
+   npm run setup
+   # or
+   yarn setup
+   ```
+   This will install the required Python packages listed in `python/requirements.txt`.
+
+4. **Configure environment variables**
+   Create a `.env.local` file in the root directory with the following:
+   ```env
+   GOOGLE_API_KEY=your_google_api_key
+   GOOGLE_CLIENT_EMAIL=your_google_client_email
+   NEXT_PUBLIC_BASE_URL=http://localhost:3000
    ```
 
-3. **Configure Environment Variables**:
-   * In your Vercel project settings or in a local `.env` file, set:
-     ```
-     GOOGLE_API_KEY=<YOUR_GOOGLE_GENERATIVE_AI_API_KEY>
-     ```
-   * If using `.env.local` with Next.js, it might look like:
-     ```
-     GOOGLE_API_KEY=<YOUR_GOOGLE_GENERATIVE_AI_API_KEY>
-     ```
-
-4. **Run the Development Server**:
+5. **Start the development server**
    ```bash
    npm run dev
-   ```
-   Or:
-   ```bash
+   # or
    yarn dev
    ```
-   * Then visit [http://localhost:3000](http://localhost:3000) to see the app.
 
 ---
 
 ## Usage
 
-1. **Open the application** in your browser at `http://localhost:3000`.  
-2. **Select** either:
-   * **Single Website**: to analyze one e-commerce site.  
-   * **Compare Two Websites**: to analyze and compare both.  
-3. **Enter the URL(s)** in the input field(s).  
-4. **Click “Analyze Website(s)”**:
-   1. The application fetches and parses each site’s homepage, categories, product pages, and cart/checkout page.  
-   2. Summarizes the site content.  
-   3. Checks with Google’s AI if it’s e-commerce.  
-   4. If yes, requests a detailed CX breakdown.  
-   5. Results appear once the AI finishes.  
-5. **View the Analysis**:
-   * **Overall Score** (0-100).  
-   * **Component scores** with Strengths, Weaknesses.  
-   * **Detailed Summary**.  
-   * **Actionable Items** for each category.
+- Access the application at `http://localhost:3000`
+- Choose analysis mode:
+  - **Single Website**: Analyze one e-commerce website
+  - **Compare Two Websites**: Compare two e-commerce websites side-by-side
+- Enter website URL(s) and click "Analyze Website(s)"
+- Review the results:
+  - Overall CX Score
+  - Component Scores (Visual Appeal, User Journey, etc.)
+  - Detailed Summary
+  - Actionable Recommendations
+  - Page-specific analysis (for single website mode)
 
 ---
 
 ## Project Structure
 
-A simplified view:
-
 ```
-ecommerce-analyzer
-├── actions
-│   └── ai-agent.ts           # Server-side logic for analyzing websites (simulates user flow + AI prompts)
-├── components/ui
-│   ├── progress.tsx          # Custom progress bar component
-│   ├── tooltip.tsx           # Tooltip utilities
-│   └── ... (other UI components)
-├── pages
-│   └── index.tsx             # Main page of the Next.js app (UI for single/two-site analysis)
-├── .env.local                # (Ignored by Git) Place your GOOGLE_API_KEY here
-├── package.json
-└── README.md                 # You are here!
+tata-cx/
+├── actions/
+│   ├── ai-agent.ts
+│   ├── generate-page-analysis-data.ts
+│   └── python-bridge.ts
+├── app/
+│   ├── page.tsx
+│   └── layout.tsx
+├── components/
+│   ├── comparison-view.tsx
+│   ├── page-analysis.tsx
+│   ├── score-display.tsx
+│   └── ui/
+│       ├── circular-progress.tsx
+│       └── progress.tsx
+├── python/
+│   ├── ai_processor.py
+│   └── requirements.txt
+├── setup.ts
+└── package.json
 ```
 
 ---
 
 ## Code Flow Overview
 
-1. **`Home` Page** (`index.tsx`)
-   * Accepts user input for website URLs.  
-   * Invokes `analyzeWebsite(url)` from `ai-agent.ts`.
-2. **`analyzeWebsite(url)`** (`ai-agent.ts`)
-   * Checks the cache to avoid repeated requests.  
-   * **`simulateUserFlow(url)`**:
-     * Fetches homepage, categories, products, cart/checkout.  
-   * Summarizes site data as `contentForAnalysis`.  
-   * Queries Google’s Generative AI in two steps:
-     1. **E-commerce check** (YES/NO).  
-     2. If YES, a detailed CX analysis by 6 components.  
-   * Returns JSON with either an error or the AI’s results.  
-   * Caches the final result for 1 hour.
-3. **UI Parsing**
-   * The Next.js component extracts structured data (scores, rationale, etc.) from the AI’s text and displays them via Accordions, Tables, and Progress bars.
+1. **User Input**: User enters website URL(s) in the UI
+2. **Web Scraping**: `ai-agent.ts` fetches content and simulates user flow
+3. **Data Processing**:
+   - JavaScript sends data to Python via `python-bridge.ts`
+   - Python processes it using Google Generative AI
+   - Results are returned to JS
+4. **Analysis Generation**:
+   - Overall analysis: `analyzeWebsite` function
+   - Page-specific: `generatePageAnalysisData` function
+5. **Rendering**: Results shown using various visualization components
 
 ---
 
 ## Customization
 
-* **Cheerio Selectors**: Update arrays in `findNavigationElements`, `findProductElements`, or `findCartIcon` if your site uses different naming conventions.  
-* **Prompt Adjustments**: Modify prompts in `analyzeWebsite()` to change the style or depth of analysis.  
-* **Styling**: All UI is styled with Tailwind CSS; override or extend in your global stylesheet if needed.  
-* **Cache Duration**: Change `CACHE_DURATION` in `ai-agent.ts` to customize how long results are cached.
+### Modifying AI Prompts
+Edit prompts in `python/ai_processor.py`:
+- `analyze_website` for overall analysis
+- `generate_page_analysis` for page-specific analysis
+
+### Adding New Analysis Components
+- Create a new component in `components/`
+- Update `app/page.tsx` to include it
+- Modify AI prompts accordingly
+
+### Extending Web Scraping
+Modify functions in `actions/ai-agent.ts`:
+- `fetchPage`, `findNavigationElements`, `simulateUserFlow`, etc.
 
 ---
 
 ## License
 
-This project is licensed under the **MIT License**. See the `LICENSE` file for details.
+MIT License
 
----
+```
+Copyright (c) 2023 Tata CX
 
-*Thank you for using the E-Commerce Website Analyzer! Feel free to open issues or submit pull requests to improve the tool.*
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
