@@ -21,7 +21,7 @@ def analyze_website(content_for_analysis):
 
     # Set up the model
     model = GenerativeModel(
-        model_name="gemini-2.0-flash-thinking-exp-01-21",
+        model_name="gemini-2.0-flash",
         generation_config={
             "temperature": 0.9,
             "top_k": 1,
@@ -127,7 +127,7 @@ def generate_page_analysis(url, actual_page_urls):
     """
     # Set up the model
     model = GenerativeModel(
-        model_name="gemini-2.0-flash-thinking-exp-01-21",
+        model_name="gemini-2.0-flash",
         generation_config={
             "temperature": 0.7,
             "top_k": 1,
