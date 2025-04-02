@@ -225,17 +225,25 @@ export function PageAnalysis({
                             {rec.referenceWebsite && rec.referenceWebsite.name && (
                               <div className="bg-gray-100 p-3 rounded-lg mt-3">
                                 <p className="font-medium mb-1">Reference: {rec.referenceWebsite.name}</p>
-                                {rec.referenceWebsite.url && (
-                                  <a
-                                    href={rec.referenceWebsite.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-500 hover:text-blue-700 flex items-center"
-                                  >
-                                    {rec.referenceWebsite.url}
-                                    <ExternalLink className="h-4 w-4 ml-1" />
-                                  </a>
-                                )}
+                                {rec.referenceWebsite.url &&
+                                  !rec.referenceWebsite.url.includes("localhost") &&
+                                  !rec.referenceWebsite.url.includes("example.com") && (
+                                    <a
+                                      href={rec.referenceWebsite.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-500 hover:text-blue-700 flex items-center"
+                                    >
+                                      {rec.referenceWebsite.url}
+                                      <ExternalLink className="h-4 w-4 ml-1" />
+                                    </a>
+                                  )}
+                                {(!rec.referenceWebsite.url ||
+                                  rec.referenceWebsite.url.includes("localhost") ||
+                                  rec.referenceWebsite.url.includes("example.com")) &&
+                                  rec.referenceWebsite.name && (
+                                    <p className="text-gray-600">Reference: {rec.referenceWebsite.name}</p>
+                                  )}
                                 {rec.referenceWebsite.description && (
                                   <p className="text-sm text-gray-600 mt-1">{rec.referenceWebsite.description}</p>
                                 )}

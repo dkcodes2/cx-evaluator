@@ -205,9 +205,9 @@ Recommendations:
 1. [Detailed suggestion 1 - explaining both what to implement and how to implement it. Use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
 Reasoning: [Detailed explanation of why this recommendation matters and what specific benefits it will bring. Present this as a complete paragraph with proper sentence structure.]
 Reference Website:
-Name: [Website Name]
-URL: [Website URL]
-Description: [Brief description]
+Name: [Website Name - use a real e-commerce site like Amazon, Shopify, Nike, etc.]
+URL: [Full absolute URL starting with https:// to a SPECIFIC relevant page on that website, not a generic homepage]
+Description: [Brief description of why this specific page is a good example]
 
 2. [Detailed suggestion 2 - explaining both what to implement and how to implement it. Use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
 Reasoning: [Detailed explanation of why this recommendation matters and what specific benefits it will bring. Present this as a complete paragraph with proper sentence structure.]
@@ -220,6 +220,7 @@ CRITICAL: Do not use "Page Type:" prefix before the page type name.
 CRITICAL: Do not use square brackets around page type names.
 CRITICAL: Start each section directly with the page type name followed by a colon (e.g., "Homepage:").
 CRITICAL: Provide DETAILED recommendations with specific implementation guidance, not just general advice.
+CRITICAL: For reference websites, always provide FULL absolute URLs (starting with https://) to SPECIFIC pages, not generic homepages or placeholder text.
 """
 
     # Generate the analysis

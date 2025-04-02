@@ -11,6 +11,44 @@ function isSameDomain(baseUrl: string, urlToCheck: string): boolean {
   }
 }
 
+function validateAndFixUrl(url: string): string {
+  if (!url) return ""
+
+  // Check if it's already a valid URL
+  try {
+    new URL(url)
+    return url
+  } catch (e) {
+    // Not a valid URL
+  }
+
+  // Check if it's a relative URL or missing protocol
+  if (url.startsWith("/")) {
+    return `https://example.com${url}`
+  } else if (!url.includes("://")) {
+    return `https://${url}`
+  }
+
+  // Check if it contains placeholder text
+  const placeholderPatterns = [
+    /\[.*?\]/,
+    /example\.com/,
+    /localhost/,
+    /refer to/i,
+    /such as/i,
+    /like amazon/i,
+    /like shopify/i,
+    /any of these/i,
+  ]
+
+  if (placeholderPatterns.some((pattern) => pattern.test(url))) {
+    // Replace with empty string if it's a placeholder
+    return ""
+  }
+
+  return url
+}
+
 // Simple in-memory cache
 const cache: { [key: string]: { result: any; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
@@ -451,14 +489,15 @@ function parseAnalysisText(
                 if (line.startsWith("Name:")) {
                   referenceWebsite.name = line.replace(/^Name:\s*/i, "").trim()
                 } else if (line.startsWith("URL:")) {
-                  referenceWebsite.url = line.replace(/^URL:\s*/i, "").trim()
+                  const rawUrl = line.replace(/^URL:\s*/i, "").trim()
+                  referenceWebsite.url = validateAndFixUrl(rawUrl)
                 } else if (line.startsWith("Description:")) {
                   referenceWebsite.description = line.replace(/^Description:\s*/i, "").trim()
                 } else if (!referenceWebsite.name && line.includes("http")) {
                   // If we find a URL without explicit label
                   const urlMatch = line.match(/(https?:\/\/[^\s]+)/)
                   if (urlMatch) {
-                    referenceWebsite.url = urlMatch[1]
+                    referenceWebsite.url = validateAndFixUrl(urlMatch[1])
                     referenceWebsite.name = line.replace(urlMatch[1], "").trim() || "Reference Website"
                   }
                 } else if (referenceWebsite.name && !referenceWebsite.description) {
@@ -470,7 +509,7 @@ function parseAnalysisText(
               // Look for URLs anywhere in the item
               const urlMatch = item.match(/(https?:\/\/[^\s\n]+)/)
               if (urlMatch) {
-                referenceWebsite.url = urlMatch[1]
+                referenceWebsite.url = validateAndFixUrl(urlMatch[1])
                 referenceWebsite.name = "Reference Website"
               }
             }
@@ -628,4 +667,6 @@ export async function generatePageAnalysisData(url: string) {
     }))
   }
 }
+
+
 
