@@ -4,28 +4,109 @@ import * as cheerio from "cheerio"
 // Remove the import of URL from 'url'
 // import { URL } from "url"
 
+// Add this function at the top of the file, before the fetchPage function
+function getRandomUserAgent() {
+  const userAgents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36 Edg/92.0.902.84",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+  ]
+  return userAgents[Math.floor(Math.random() * userAgents.length)]
+}
+
 // Simple in-memory cache (Note: This will reset on server restart)
 const cache: { [url: string]: { result: string; timestamp: number } } = {}
 const CACHE_DURATION = 1000 * 60 * 60 // 1 hour
 
+// Replace the existing fetchPage function with this updated version
 async function fetchPage(url: string) {
-  console.log(`Fetching page: ${url}`)
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-      Connection: "keep-alive",
-      "Upgrade-Insecure-Requests": "1",
-      "Cache-Control": "no-cache",
-      Pragma: "no-cache",
-    },
-  })
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+  console.log(`Attempting to fetch page: ${url}`)
+
+  // First try direct request without proxy
+  try {
+    console.log(`Trying direct request to: ${url}`)
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": getRandomUserAgent(),
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        Connection: "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Direct request failed with status: ${response.status}`)
+    }
+
+    const html = await response.text()
+
+    // Verify we got actual HTML content, not an error page
+    if (html.length < 100 || html.includes("Access denied") || html.includes("Forbidden")) {
+      throw new Error("Direct request returned invalid content")
+    }
+
+    console.log(`Successfully fetched page directly`)
+    return html
+  } catch (error) {
+    console.log(`Direct request failed: ${error.message}. Trying proxy services...`)
+
+    // List of proxy services to try if direct request fails
+    const proxyServices = [
+      // CORS Anywhere alternatives
+      (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      (url: string) => `https://cors-proxy.htmldriven.com/?url=${encodeURIComponent(url)}`,
+      (url: string) => `https://cors.bridged.cc/${url}`,
+      (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
+      (url: string) => `https://api.codetabs.com/v1/proxy?quest=${url}`,
+    ]
+
+    // Try each proxy service until one works
+    for (let i = 0; i < proxyServices.length; i++) {
+      try {
+        const proxyUrl = proxyServices[i](url)
+        console.log(`Trying proxy service ${i + 1}: ${proxyUrl}`)
+
+        const response = await fetch(proxyUrl, {
+          headers: {
+            "User-Agent": getRandomUserAgent(),
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+          },
+          cache: "no-store", // Bypass cache
+        })
+
+        if (!response.ok) {
+          console.log(`Proxy service ${i + 1} returned status: ${response.status}`)
+          continue // Try next proxy
+        }
+
+        const html = await response.text()
+
+        // Verify we got actual HTML content, not an error page
+        if (html.length < 100 || html.includes("Access denied") || html.includes("Forbidden")) {
+          console.log(`Proxy service ${i + 1} returned invalid content`)
+          continue // Try next proxy
+        }
+
+        console.log(`Successfully fetched page via proxy service ${i + 1}`)
+        return html
+      } catch (error) {
+        console.log(`Error with proxy service ${i + 1}:`, error)
+        // Continue to next proxy service
+      }
+    }
+
+    // If all proxies fail, throw an error
+    throw new Error(`All fetch attempts failed for ${url}`)
   }
-  return await response.text()
 }
 
 function findNavigationElements($: cheerio.CheerioAPI): string[] {

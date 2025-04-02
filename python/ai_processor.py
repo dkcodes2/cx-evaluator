@@ -1,8 +1,8 @@
 import json
 import sys
 import os
-from google.generativeai import GenerativeModel, configure
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.generativeai import GenerativeModel, configure # type: ignore
+from google.generativeai.types import HarmCategory, HarmBlockThreshold # type: ignore
 
 # Configure the Google Generative AI client
 configure(api_key=os.environ.get("GOOGLE_API_KEY"))
