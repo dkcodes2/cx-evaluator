@@ -98,13 +98,26 @@ def analyze_website(content_for_analysis):
     [Provide a comprehensive 5-7 sentence summary of the website's overall CX, highlighting key strengths, weaknesses, and areas for improvement. Include insights on how these factors collectively impact the user experience and potential conversion rates. Each sentence should be on a new line.]
 
     Specific Actionable Items:
-    • Visual Appeal & Branding: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
-    • User Journey: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
-    • Intuitive Navigation: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
-    • Visual Hierarchy: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
-    • Value Proposition: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
-    • Call to Action: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
-    • Additional Recommendation: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
+    • Visual Appeal & Branding: [Detailed, specific action item with clear implementation steps. Make sure to use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
+    Expected benefit: [Clearly state the expected benefits in a separate paragraph.]
+
+    • User Journey: [Detailed, specific action item with clear implementation steps. Make sure to use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
+    Expected benefit: [Clearly state the expected benefits in a separate paragraph.]
+
+    • Intuitive Navigation: [Detailed, specific action item with clear implementation steps. Make sure to use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
+    Expected benefit: [Clearly state the expected benefits in a separate paragraph.]
+
+    • Visual Hierarchy: [Detailed, specific action item with clear implementation steps. Make sure to use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
+    Expected benefit: [Clearly state the expected benefits in a separate paragraph.]
+
+    • Value Proposition: [Detailed, specific action item with clear implementation steps. Make sure to use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
+    Expected benefit: [Clearly state the expected benefits in a separate paragraph.]
+
+    • Call to Action: [Detailed, specific action item with clear implementation steps. Make sure to use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
+    Expected benefit: [Clearly state the expected benefits in a separate paragraph.]
+
+    • Additional Recommendation: [Detailed, specific action item with clear implementation steps. Make sure to use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
+    Expected benefit: [Clearly state the expected benefits in a separate paragraph.]
 
     IMPORTANT: For each actionable item, provide detailed implementation guidance, not just general advice. Explain HOW to implement the recommendation, not just WHAT to implement.
 
@@ -189,19 +202,15 @@ Weaknesses:
 • [Weakness 3]
 
 Recommendations:
-1. [Detailed suggestion 1 - minimum 2-3 sentences explaining both what to implement and how to implement it]
- Reasoning: [Detailed explanation of why this recommendation matters and what specific benefits it will bring]
- Reference Website:
- Name: [Website Name]
- URL: [Website URL]
- Description: [Brief description]
+1. [Detailed suggestion 1 - explaining both what to implement and how to implement it. Use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
+Reasoning: [Detailed explanation of why this recommendation matters and what specific benefits it will bring. Present this as a complete paragraph with proper sentence structure.]
+Reference Website:
+Name: [Website Name]
+URL: [Website URL]
+Description: [Brief description]
 
-2. [Detailed suggestion 2 - minimum 2-3 sentences explaining both what to implement and how to implement it]
- Reasoning: [Detailed explanation of why this recommendation matters and what specific benefits it will bring]
- Reference Website:
- Name: [Website Name]
- URL: [Website URL]
- Description: [Brief description]
+2. [Detailed suggestion 2 - explaining both what to implement and how to implement it. Use complete sentences and proper paragraph structure. Avoid using abbreviations like "e.g." at the end of lines.]
+Reasoning: [Detailed explanation of why this recommendation matters and what specific benefits it will bring. Present this as a complete paragraph with proper sentence structure.]
 
 CRITICAL: Follow this exact format for EACH page type. Use bullet points (•) for strengths and weaknesses, and numbered items for recommendations.
 CRITICAL: Include ALL sections for EACH page type.

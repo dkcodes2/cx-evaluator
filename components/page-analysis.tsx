@@ -43,35 +43,67 @@ export function PageAnalysis({
 
   // Function to format recommendation text with line breaks
   const formatRecommendationText = (text: string) => {
-    // Split by "Expected benefit:" or similar phrases
-    const parts = text.split(/Expected benefit[s]?:|Benefits?:|Outcome:|Results?:/i)
+    // Clean up any obvious formatting issues
+    const cleanedText = text
+      .replace(/\n\s*([a-z])/g, " $1") // Join lines that start with lowercase letters
+      .replace(/([a-z])\n\s*([a-z])/g, "$1 $2") // Join broken sentences
+      .replace(/\n\s*,/g, ",") // Fix comma at start of line
+      .replace(/\n\s*\./g, ".") // Fix period at start of line
+      .replace(/([a-z])\.\s*\n([A-Z])/g, "$1.\n\n$2") // Add extra line break between sentences
+      .replace(/\b([a-z])\.\s*([A-Z])/g, "$1.\n\n$2") // Add line break between sentences
+      .replace(/\b(e\.g\.)\s*\n/g, "$1 ") // Fix e.g. line breaks
+      .replace(/\b(i\.e\.)\s*\n/g, "$1 ") // Fix i.e. line breaks
+      .replace(/\n\s*\n\s*\n/g, "\n\n") // Remove excessive line breaks
+      .trim()
 
-    if (parts.length > 1) {
+    // Split by "Expected benefit:" or similar phrases
+    const benefitSplit = cleanedText.split(/Expected benefit[s]?:|Benefits?:|Outcome:|Results?:/i)
+
+    if (benefitSplit.length > 1) {
       return (
         <>
-          <p className="mb-2">{parts[0].trim()}</p>
-          <p className="font-medium text-gray-700 mt-3">Expected benefit:</p>
-          <p>{parts[1].trim()}</p>
+          <div className="mb-4">
+            {benefitSplit[0]
+              .trim()
+              .split("\n\n")
+              .map((para, idx) => (
+                <p key={idx} className="mb-2">
+                  {para.trim()}
+                </p>
+              ))}
+          </div>
+          <div>
+            <p className="font-medium text-gray-700 mb-2">Expected benefit:</p>
+            {benefitSplit[1]
+              .trim()
+              .split("\n\n")
+              .map((para, idx) => (
+                <p key={idx} className="mb-2">
+                  {para.trim()}
+                </p>
+              ))}
+          </div>
         </>
       )
     }
 
-    // If no expected benefit section, try to break by sentences
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text]
+    // If no expected benefit section, format paragraphs
+    const paragraphs = cleanedText.split("\n\n").filter((p) => p.trim().length > 0)
 
-    if (sentences.length > 1) {
+    if (paragraphs.length > 0) {
       return (
         <>
-          {sentences.map((sentence, idx) => (
-            <p key={idx} className={idx < sentences.length - 1 ? "mb-2" : ""}>
-              {sentence.trim()}
+          {paragraphs.map((para, idx) => (
+            <p key={idx} className={idx < paragraphs.length - 1 ? "mb-3" : ""}>
+              {para.trim()}
             </p>
           ))}
         </>
       )
     }
 
-    return <p>{text}</p>
+    // Fallback to simple text
+    return <p>{cleanedText}</p>
   }
 
   return (
@@ -178,7 +210,7 @@ export function PageAnalysis({
                 {recommendations.length > 0 &&
                 recommendations[0].suggestion !== "No recommendations provided" &&
                 recommendations[0].suggestion !== "Try analyzing the website again" ? (
-                  <Accordion type="single" collapsible className="w-full">
+                  <Accordion type="multiple" className="w-full">
                     {recommendations.map((rec, index) => (
                       <AccordionItem key={index} value={`rec-${index}`}>
                         <AccordionTrigger className="hover:no-underline">

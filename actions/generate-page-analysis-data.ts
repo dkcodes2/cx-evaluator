@@ -380,6 +380,16 @@ function parseAnalysisText(
         // Process each recommendation item
         recommendations = recommendationItems
           .map((item) => {
+            // Clean up the item text to fix common formatting issues
+            item = item
+              .replace(/\n\s*([a-z])/g, " $1") // Join lines that start with lowercase letters
+              .replace(/([a-z])\n\s*([a-z])/g, "$1 $2") // Join broken sentences
+              .replace(/\n\s*,/g, ",") // Fix comma at start of line
+              .replace(/\n\s*\./g, ".") // Fix period at start of line
+              .replace(/\b(e\.g\.)\s*\n/g, "$1 ") // Fix e.g. line breaks
+              .replace(/\b(i\.e\.)\s*\n/g, "$1 ") // Fix i.e. line breaks
+              .trim()
+
             // Split into lines for easier processing
             const lines = item
               .split("\n")
@@ -411,14 +421,14 @@ function parseAnalysisText(
               }
               // Otherwise collect all lines as part of reasoning
               else if (i > 0 && !referenceStarted) {
-                if (reasoning) reasoning += " " + line
+                if (reasoning) reasoning += "\n" + line
                 else reasoning = line
               }
             }
 
             // If no explicit reasoning found but we have lines, use them
             if (!reasoning && lines.length > 1) {
-              reasoning = lines.slice(1).join(" ")
+              reasoning = lines.slice(1).join("\n")
             }
 
             // Extract reference website details
