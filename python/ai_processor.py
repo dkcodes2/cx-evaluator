@@ -1,8 +1,8 @@
 import json
 import sys
 import os
-from google.generativeai import GenerativeModel, configure # type: ignore
-from google.generativeai.types import HarmCategory, HarmBlockThreshold # type: ignore
+from google.generativeai import GenerativeModel, configure
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # Configure the Google Generative AI client
 configure(api_key=os.environ.get("GOOGLE_API_KEY"))
@@ -21,7 +21,7 @@ def analyze_website(content_for_analysis):
 
     # Set up the model
     model = GenerativeModel(
-        model_name="gemini-2.0-flash",
+        model_name="gemini-2.0-flash-thinking-exp-01-21",
         generation_config={
             "temperature": 0.9,
             "top_k": 1,
@@ -98,13 +98,15 @@ def analyze_website(content_for_analysis):
     [Provide a comprehensive 5-7 sentence summary of the website's overall CX, highlighting key strengths, weaknesses, and areas for improvement. Include insights on how these factors collectively impact the user experience and potential conversion rates. Each sentence should be on a new line.]
 
     Specific Actionable Items:
-    • Visual Appeal & Branding: [Detailed, specific action item]
-    • User Journey: [Detailed, specific action item]
-    • Intuitive Navigation: [Detailed, specific action item]
-    • Visual Hierarchy: [Detailed, specific action item]
-    • Value Proposition: [Detailed, specific action item]
-    • Call to Action: [Detailed, specific action item]
-    • Additional Recommendation: [Detailed, specific action item]
+    • Visual Appeal & Branding: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
+    • User Journey: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
+    • Intuitive Navigation: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
+    • Visual Hierarchy: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
+    • Value Proposition: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
+    • Call to Action: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
+    • Additional Recommendation: [Detailed, specific action item with clear implementation steps and expected benefits. Minimum 2-3 sentences.]
+
+    IMPORTANT: For each actionable item, provide detailed implementation guidance, not just general advice. Explain HOW to implement the recommendation, not just WHAT to implement.
 
     Ensure that all sections, including the Specific Actionable Items, are fully completed in your response.
     """
@@ -127,7 +129,7 @@ def generate_page_analysis(url, actual_page_urls):
     """
     # Set up the model
     model = GenerativeModel(
-        model_name="gemini-2.0-flash",
+        model_name="gemini-2.0-flash-thinking-exp-01-21",
         generation_config={
             "temperature": 0.7,
             "top_k": 1,
@@ -174,7 +176,7 @@ For each page type, provide the following information in EXACTLY this format:
 Homepage:
 Page URL: [URL]
 Overall Score: [0-100]
-Score Reasoning: [2-3 sentences explaining the score]
+Score Reasoning: [Provide a detailed 3-5 sentence explanation of the score, analyzing the page's strengths and weaknesses in terms of user experience, design, functionality, and conversion optimization.]
 
 Strengths:
 • [Strength 1]
@@ -187,15 +189,15 @@ Weaknesses:
 • [Weakness 3]
 
 Recommendations:
-1. [Suggestion 1]
- Reasoning: [Explanation]
+1. [Detailed suggestion 1 - minimum 2-3 sentences explaining both what to implement and how to implement it]
+ Reasoning: [Detailed explanation of why this recommendation matters and what specific benefits it will bring]
  Reference Website:
  Name: [Website Name]
  URL: [Website URL]
  Description: [Brief description]
 
-2. [Suggestion 2]
- Reasoning: [Explanation]
+2. [Detailed suggestion 2 - minimum 2-3 sentences explaining both what to implement and how to implement it]
+ Reasoning: [Detailed explanation of why this recommendation matters and what specific benefits it will bring]
  Reference Website:
  Name: [Website Name]
  URL: [Website URL]
@@ -208,6 +210,7 @@ CRITICAL: Do not use markdown formatting like **bold** or *italic*. Use plain te
 CRITICAL: Do not use "Page Type:" prefix before the page type name.
 CRITICAL: Do not use square brackets around page type names.
 CRITICAL: Start each section directly with the page type name followed by a colon (e.g., "Homepage:").
+CRITICAL: Provide DETAILED recommendations with specific implementation guidance, not just general advice.
 """
 
     # Generate the analysis

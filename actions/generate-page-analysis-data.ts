@@ -51,8 +51,8 @@ async function getActualPageUrls(baseUrl: string) {
     if (websiteData.categories && websiteData.categories.length > 0) {
       // Try to find a category with products
       const categoriesWithProducts = websiteData.categories
-        .filter((cat: { productCount: number }) => cat.productCount > 0)
-        .sort((a: { productCount: number }, b: { productCount: number }) => b.productCount - a.productCount)
+        .filter((cat) => cat.productCount > 0)
+        .sort((a, b) => b.productCount - a.productCount)
 
       if (categoriesWithProducts.length > 0) {
         const categoryUrl = categoriesWithProducts[0].url
@@ -69,7 +69,7 @@ async function getActualPageUrls(baseUrl: string) {
     if (websiteData.products && websiteData.products.length > 0) {
       // Try to find a product with price and description
       const productsWithDetails = websiteData.products.filter(
-        (product: { price: string; description: string }) => product.price && product.price !== "N/A" && product.description && product.description !== "N/A",
+        (product) => product.price && product.price !== "N/A" && product.description && product.description !== "N/A",
       )
 
       if (productsWithDetails.length > 0) {
@@ -389,17 +389,36 @@ function parseAnalysisText(
             // First line is usually the suggestion
             const suggestion = lines[0] || ""
 
-            // Look for reasoning
+            // Look for reasoning - capture all content until the next section
             let reasoning = ""
-            const reasoningLine = lines.find(
-              (line) => line.startsWith("Reasoning:") || line.startsWith("Rationale:") || line.startsWith("Why:"),
-            )
+            let reasoningStarted = false
+            let referenceStarted = false
 
-            if (reasoningLine) {
-              reasoning = reasoningLine.replace(/^(Reasoning|Rationale|Why):\s*/i, "").trim()
-            } else if (lines.length > 1) {
-              // If no explicit reasoning found, use the second line
-              reasoning = lines[1]
+            // Collect all lines that appear to be part of the reasoning
+            for (let i = 1; i < lines.length; i++) {
+              const line = lines[i]
+
+              // If we hit a reference section, stop collecting reasoning
+              if (line.includes("Reference Website:") || line.includes("Reference:") || line.includes("Example:")) {
+                referenceStarted = true
+                break
+              }
+
+              // If we find an explicit reasoning marker, start collecting
+              if (line.startsWith("Reasoning:") || line.startsWith("Rationale:") || line.startsWith("Why:")) {
+                reasoningStarted = true
+                reasoning = line.replace(/^(Reasoning|Rationale|Why):\s*/i, "").trim()
+              }
+              // Otherwise collect all lines as part of reasoning
+              else if (i > 0 && !referenceStarted) {
+                if (reasoning) reasoning += " " + line
+                else reasoning = line
+              }
+            }
+
+            // If no explicit reasoning found but we have lines, use them
+            if (!reasoning && lines.length > 1) {
+              reasoning = lines.slice(1).join(" ")
             }
 
             // Extract reference website details
@@ -432,6 +451,9 @@ function parseAnalysisText(
                     referenceWebsite.url = urlMatch[1]
                     referenceWebsite.name = line.replace(urlMatch[1], "").trim() || "Reference Website"
                   }
+                } else if (referenceWebsite.name && !referenceWebsite.description) {
+                  // If we have a name but no description yet, use remaining lines as description
+                  referenceWebsite.description = line
                 }
               }
             } else {

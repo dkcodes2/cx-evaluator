@@ -575,7 +575,7 @@ export default function Home() {
                 {actionableItemsArray[0]?.length > 0 && (
                   <div className="bg-white rounded-lg shadow-sm border p-6">
                     <h2 className="text-xl font-bold mb-4 text-[#4285F4]">Actionable Recommendations</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                       {actionableItemsArray[0].map((item, index) => (
                         <div key={index} className="bg-gray-50 p-4 rounded-lg">
                           <div className="flex items-start">

@@ -89,7 +89,13 @@ export function PageAnalysis({
               <div className="bg-white p-4 rounded-lg">
                 <h3 className="font-medium mb-2">Score Reasoning</h3>
                 {scoreReasoning && scoreReasoning !== "No data available for this page type" ? (
-                  <p className="text-gray-700">{scoreReasoning}</p>
+                  <div className="space-y-2">
+                    {scoreReasoning.split("\n").map((paragraph, idx) => (
+                      <p key={idx} className="text-gray-700">
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
                 ) : (
                   <p className="text-gray-500">-</p>
                 )}
