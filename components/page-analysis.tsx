@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { ExternalLink, CheckCircle, XCircle, Lightbulb } from "lucide-react"
 import { CircularProgress } from "@/components/ui/circular-progress"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 interface Recommendation {
   suggestion: string
@@ -39,6 +40,39 @@ export function PageAnalysis({
     scoreReasoning !== "This page type was not found in the analysis." ||
     (strengths.length > 0 && strengths[0] !== "No data available for this page type") ||
     (weaknesses.length > 0 && weaknesses[0] !== "No data available for this page type")
+
+  // Function to format recommendation text with line breaks
+  const formatRecommendationText = (text: string) => {
+    // Split by "Expected benefit:" or similar phrases
+    const parts = text.split(/Expected benefit[s]?:|Benefits?:|Outcome:|Results?:/i)
+
+    if (parts.length > 1) {
+      return (
+        <>
+          <p className="mb-2">{parts[0].trim()}</p>
+          <p className="font-medium text-gray-700 mt-3">Expected benefit:</p>
+          <p>{parts[1].trim()}</p>
+        </>
+      )
+    }
+
+    // If no expected benefit section, try to break by sentences
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text]
+
+    if (sentences.length > 1) {
+      return (
+        <>
+          {sentences.map((sentence, idx) => (
+            <p key={idx} className={idx < sentences.length - 1 ? "mb-2" : ""}>
+              {sentence.trim()}
+            </p>
+          ))}
+        </>
+      )
+    }
+
+    return <p>{text}</p>
+  }
 
   return (
     <Card className="w-full">
@@ -144,36 +178,42 @@ export function PageAnalysis({
                 {recommendations.length > 0 &&
                 recommendations[0].suggestion !== "No recommendations provided" &&
                 recommendations[0].suggestion !== "Try analyzing the website again" ? (
-                  <ul className="space-y-6">
+                  <Accordion type="single" collapsible className="w-full">
                     {recommendations.map((rec, index) => (
-                      <li key={index} className="border-b pb-4 last:border-b-0 last:pb-0">
-                        <div className="flex items-start mb-2">
-                          <Lightbulb className="h-5 w-5 text-yellow-500 mr-2 mt-0.5 flex-shrink-0" />
-                          <span className="font-medium">{rec.suggestion}</span>
-                        </div>
-                        {rec.reasoning && <p className="text-gray-700 mb-2">{rec.reasoning}</p>}
-                        {rec.referenceWebsite && rec.referenceWebsite.name && (
-                          <div className="bg-gray-100 p-3 rounded-lg">
-                            <p className="font-medium mb-1">Reference: {rec.referenceWebsite.name}</p>
-                            {rec.referenceWebsite.url && (
-                              <a
-                                href={rec.referenceWebsite.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-500 hover:text-blue-700 flex items-center"
-                              >
-                                {rec.referenceWebsite.url}
-                                <ExternalLink className="h-4 w-4 ml-1" />
-                              </a>
-                            )}
-                            {rec.referenceWebsite.description && (
-                              <p className="text-sm text-gray-600 mt-1">{rec.referenceWebsite.description}</p>
+                      <AccordionItem key={index} value={`rec-${index}`}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-start text-left">
+                            <Lightbulb className="h-5 w-5 text-yellow-500 mr-2 mt-0.5 flex-shrink-0" />
+                            <span className="font-medium">{rec.suggestion}</span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="pl-7">
+                            {rec.reasoning && <div className="mb-4">{formatRecommendationText(rec.reasoning)}</div>}
+                            {rec.referenceWebsite && rec.referenceWebsite.name && (
+                              <div className="bg-gray-100 p-3 rounded-lg mt-3">
+                                <p className="font-medium mb-1">Reference: {rec.referenceWebsite.name}</p>
+                                {rec.referenceWebsite.url && (
+                                  <a
+                                    href={rec.referenceWebsite.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-500 hover:text-blue-700 flex items-center"
+                                  >
+                                    {rec.referenceWebsite.url}
+                                    <ExternalLink className="h-4 w-4 ml-1" />
+                                  </a>
+                                )}
+                                {rec.referenceWebsite.description && (
+                                  <p className="text-sm text-gray-600 mt-1">{rec.referenceWebsite.description}</p>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </li>
+                        </AccordionContent>
+                      </AccordionItem>
                     ))}
-                  </ul>
+                  </Accordion>
                 ) : (
                   <p className="text-gray-500">-</p>
                 )}

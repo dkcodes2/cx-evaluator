@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress"
 import { PageAnalysis } from "@/components/page-analysis"
 import { CircularProgress } from "@/components/ui/circular-progress"
 import { ArrowDown, ArrowUp, Minus } from "lucide-react"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 interface AnalysisComponent {
   name: string
@@ -66,6 +67,7 @@ export default function Home() {
   const [partialResults, setPartialResults] = useState<boolean[]>([])
   const [pageAnalysisData, setPageAnalysisData] = useState<PageAnalysisData[]>([])
   const [isLoadingPageAnalysis, setIsLoadingPageAnalysis] = useState(false)
+  const [expandedRecommendations, setExpandedRecommendations] = useState<{ [key: string]: boolean }>({})
 
   const getScoreColorClass = (score: number | null) => {
     if (score === null) return "border-gray-300 text-gray-400"
@@ -86,6 +88,39 @@ export default function Home() {
     if (score >= 80) return "bg-yellow-500"
     if (score >= 70) return "bg-orange-500"
     return "bg-red-500"
+  }
+
+  // Function to format recommendation text with line breaks
+  const formatRecommendationText = (text: string) => {
+    // Split by "Expected benefit:" or similar phrases
+    const parts = text.split(/Expected benefit[s]?:|Benefits?:|Outcome:|Results?:/i)
+
+    if (parts.length > 1) {
+      return (
+        <>
+          <p className="mb-2">{parts[0].trim()}</p>
+          <p className="font-medium text-gray-700">Expected benefit:</p>
+          <p>{parts[1].trim()}</p>
+        </>
+      )
+    }
+
+    // If no expected benefit section, try to break by sentences
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text]
+
+    if (sentences.length > 1) {
+      return (
+        <>
+          {sentences.map((sentence, idx) => (
+            <p key={idx} className={idx < sentences.length - 1 ? "mb-2" : ""}>
+              {sentence.trim()}
+            </p>
+          ))}
+        </>
+      )
+    }
+
+    return <p>{text}</p>
   }
 
   useEffect(() => {
@@ -225,16 +260,16 @@ export default function Home() {
                 const strengths = strengthsMatch
                   ? strengthsMatch[1]
                       .split("\n")
-                      .map((s: string) => s.trim())
-                      .filter((s: string) => s.startsWith("•"))
-                      .map((s: string) => s.substring(1).trim())
+                      .map((s) => s.trim())
+                      .filter((s) => s.startsWith("•"))
+                      .map((s) => s.substring(1).trim())
                   : []
                 const weaknesses = weaknessesMatch
                   ? weaknessesMatch[1]
                       .split("\n")
-                      .map((s: string) => s.trim())
-                      .filter((s: string) => s.startsWith("•"))
-                      .map((s: string) => s.substring(1).trim())
+                      .map((s) => s.trim())
+                      .filter((s) => s.startsWith("•"))
+                      .map((s) => s.substring(1).trim())
                   : []
 
                 componentResults.push({
@@ -298,19 +333,19 @@ export default function Home() {
               if (actionableItemsMatch) {
                 const items = actionableItemsMatch[1]
                   .split("\n")
-                  .map((item: string) => item.trim())
-                  .filter((item: string) => item.startsWith("•"))
-                  .map((item: { substring: (arg0: number) => { (): any; new(): any; split: { (arg0: string): { (): any; new(): any; map: { (arg0: (s: any) => any): [any, ...any[]]; new(): any } }; new(): any } } }) => {
+                  .map((item) => item.trim())
+                  .filter((item) => item.startsWith("•"))
+                  .map((item) => {
                     const [category, ...actionParts] = item
                       .substring(1)
                       .split(":")
-                      .map((s: string) => s.trim())
+                      .map((s) => s.trim())
                     return {
                       category,
                       action: actionParts.join(":").trim(),
                     }
                   })
-                  .filter((item: { category: any; action: any }) => item.category && item.action)
+                  .filter((item) => item.category && item.action)
 
                 setActionableItemsArray((prev) => {
                   const newActionableItemsArray = [...prev]
@@ -575,21 +610,23 @@ export default function Home() {
                 {actionableItemsArray[0]?.length > 0 && (
                   <div className="bg-white rounded-lg shadow-sm border p-6">
                     <h2 className="text-xl font-bold mb-4 text-[#4285F4]">Actionable Recommendations</h2>
-                    <div className="grid grid-cols-1 gap-4">
+                    <Accordion type="single" collapsible className="w-full">
                       {actionableItemsArray[0].map((item, index) => (
-                        <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                          <div className="flex items-start">
-                            <div className="bg-[#4285F4] text-white rounded-full p-1 mr-3 mt-0.5">
-                              <CheckCircle2 className="h-4 w-4" />
+                        <AccordionItem key={index} value={`item-${index}`}>
+                          <AccordionTrigger className="hover:no-underline">
+                            <div className="flex items-center text-left">
+                              <div className="bg-[#4285F4] text-white rounded-full p-1 mr-3">
+                                <CheckCircle2 className="h-4 w-4" />
+                              </div>
+                              <h3 className="font-semibold text-[#4285F4]">{item.category}</h3>
                             </div>
-                            <div>
-                              <h3 className="font-semibold text-[#4285F4] mb-1">{item.category}</h3>
-                              <p className="text-sm text-gray-700">{item.action}</p>
-                            </div>
-                          </div>
-                        </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="pl-10 pr-4 text-gray-700">{formatRecommendationText(item.action)}</div>
+                          </AccordionContent>
+                        </AccordionItem>
                       ))}
-                    </div>
+                    </Accordion>
                   </div>
                 )}
 
