@@ -1,2 +1,5 @@
+# Core AI functionality - this is the only essential package
 google-generativeai>=0.3.0
 
+# Optional: Environment variable management
+python-dotenv>=0.19.0
