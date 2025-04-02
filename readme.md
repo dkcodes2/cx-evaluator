@@ -56,41 +56,76 @@ A powerful tool for analyzing e-commerce websites and providing detailed CX (Cus
 
 ## Setup
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/your-username/tata-cx.git
-   cd tata-cx
-   ```
+### Step 1: Install JavaScript Dependencies
 
-2. **Install JavaScript dependencies**
-   ```bash
-   npm install
-   # or
-   yarn install
-   ```
+Navigate to your project directory and install the required npm packages:
 
-3. **Set up Python environment**
-   ```bash
-   npm run setup
-   # or
-   yarn setup
-   ```
-   This will install the required Python packages listed in `python/requirements.txt`.
+```bash
+npm install
+```
 
-4. **Configure environment variables**
-   Create a `.env.local` file in the root directory with the following:
-   ```env
-   GOOGLE_API_KEY=your_google_api_key
-   GOOGLE_CLIENT_EMAIL=your_google_client_email
-   NEXT_PUBLIC_BASE_URL=http://localhost:3000
-   ```
+This will install all the dependencies listed in your `package.json` file.
 
-5. **Start the development server**
-   ```bash
-   npm run dev
-   # or
-   yarn dev
-   ```
+### Step 2: Set Up Python Environment
+
+1. Make sure you have Python 3.8 or later installed:
+
+```bash
+python --version
+# or
+python3 --version
+```
+
+2. Install the required Python packages:
+
+```bash
+pip install -r python/requirements.txt
+```
+
+If you're using a specific Python version or virtual environment, use the appropriate pip command:
+
+```bash
+# For Python 3 specifically
+pip3 install -r python/requirements.txt
+
+# Or if using a virtual environment
+python -m pip install -r python/requirements.txt
+```
+
+### Step 3: Set Up Environment Variables
+
+Create a `.env.local` file in the root directory of your project (if it doesn't exist already):
+
+```bash
+touch .env.local
+```
+
+Add your Google API key to the `.env.local` file:
+
+```env
+GOOGLE_API_KEY=your_google_api_key_here
+```
+
+You'll need to obtain a Google Gemini API key from the [Google AI Studio](https://makersuite.google.com/app/apikey).
+
+
+### Step 4: Run the Setup Script
+
+The project includes a setup script to ensure Python dependencies are correctly installed:
+
+```bash
+npm run setup
+```
+
+This script will verify that Python is correctly configured and install the necessary dependencies.
+
+### Step 5: Start the Development Server
+
+Start the Next.js development server:
+
+```bash
+npm run dev
+```
 
 ---
 
@@ -175,8 +210,6 @@ Modify functions in `actions/ai-agent.ts`:
 MIT License
 
 ```
-Copyright (c) 2023 Tata CX
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
