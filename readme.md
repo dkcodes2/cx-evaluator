@@ -61,7 +61,7 @@ A powerful tool for analyzing e-commerce websites and providing detailed CX (Cus
 Navigate to your project directory and install the required npm packages:
 
 ```bash
-npm install
+npm install --legacy-peer-deps
 ```
 
 This will install all the dependencies listed in your `package.json` file.
