@@ -1,6 +1,4 @@
 "use server"
-
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
 import { simulateUserFlow } from "./ai-agent"
 
 function isSameDomain(baseUrl: string, urlToCheck: string): boolean {
@@ -53,8 +51,8 @@ async function getActualPageUrls(baseUrl: string) {
     if (websiteData.categories && websiteData.categories.length > 0) {
       // Try to find a category with products
       const categoriesWithProducts = websiteData.categories
-        .filter((cat) => cat.productCount > 0)
-        .sort((a, b) => b.productCount - a.productCount)
+        .filter((cat: { productCount: number }) => cat.productCount > 0)
+        .sort((a: { productCount: number }, b: { productCount: number }) => b.productCount - a.productCount)
 
       if (categoriesWithProducts.length > 0) {
         const categoryUrl = categoriesWithProducts[0].url
@@ -71,7 +69,7 @@ async function getActualPageUrls(baseUrl: string) {
     if (websiteData.products && websiteData.products.length > 0) {
       // Try to find a product with price and description
       const productsWithDetails = websiteData.products.filter(
-        (product) => product.price && product.price !== "N/A" && product.description && product.description !== "N/A",
+        (product: { price: string; description: string }) => product.price && product.price !== "N/A" && product.description && product.description !== "N/A",
       )
 
       if (productsWithDetails.length > 0) {
@@ -129,7 +127,7 @@ function parseAnalysisText(
   // Try multiple approaches to extract page sections
   // Approach 1: Use regex to find sections starting with page type followed by colon
   const pageSectionRegex = new RegExp(
-    `(?:^|\n)(${pageTypes.join("|")}):[\\s\\S]*?(?=(?:\n(?:${pageTypes.join("|")}):|$))`,
+    `(?:^|\n)(?:Page Type: )?(\\[?${pageTypes.join("|")}\\]?):[\\s\\S]*?(?=(?:\n(?:Page Type: )?(\\[?${pageTypes.join("|")}\\]?):|$))`,
     "g",
   )
   pageSections = Array.from(text.matchAll(pageSectionRegex)).map((match) => match[0].trim())
@@ -139,10 +137,16 @@ function parseAnalysisText(
     console.log("First regex approach didn't find enough sections, trying alternative")
     // Approach 2: Split by page type headers more aggressively
     const pageTypeHeaders = pageTypes.map((type) => `\n${type}:`).join("|")
+    const bracketedPageTypeHeaders = pageTypes.map((type) => `\n\\[${type}\\]:`).join("|")
+    const pageTypeWithPrefix = pageTypes.map((type) => `\nPage Type: ${type}`).join("|")
+    const combinedHeaders = `${pageTypeHeaders}|${bracketedPageTypeHeaders}|${pageTypeWithPrefix}`
     pageSections = text
-      .split(new RegExp(pageTypeHeaders))
+      .split(new RegExp(combinedHeaders))
       .filter((_, index) => index > 0) // Skip the first split which is before any header
-      .map((section, index) => `${pageTypes[index]}:${section}`)
+      .map((section, index) => {
+        const pageType = pageTypes[Math.min(index, pageTypes.length - 1)]
+        return text.includes(`[${pageType}]:`) ? `[${pageType}]:${section}` : `${pageType}:${section}`
+      })
   }
 
   // If still not enough sections, try one more approach
@@ -151,7 +155,10 @@ function parseAnalysisText(
     // Approach 3: Just look for each page type explicitly
     pageSections = []
     for (const pageType of pageTypes) {
-      const regex = new RegExp(`${pageType}:[\\s\\S]*?(?=(?:\n(?:${pageTypes.join("|")}):|$))`, "i")
+      const regex = new RegExp(
+        `(?:Page Type: )?\\[?${pageType}\\]?:[\\s\\S]*?(?=(?:\n(?:Page Type: )?(?:\\[?${pageTypes.join("|")}\\]?):|$))`,
+        "i",
+      )
       const match = text.match(regex)
       if (match) {
         pageSections.push(match[0])
@@ -173,7 +180,14 @@ function parseAnalysisText(
       // Determine page type
       let pageType = ""
       for (const type of pageTypes) {
-        if (section.startsWith(type + ":") || section.includes(`\n${type}:`)) {
+        if (
+          section.startsWith(`[${type}]:`) ||
+          section.startsWith(`${type}:`) ||
+          section.startsWith(`Page Type: ${type}`) ||
+          section.includes(`\n[${type}]:`) ||
+          section.includes(`\n${type}:`) ||
+          section.includes(`\nPage Type: ${type}`)
+        ) {
           pageType = type
           break
         }
@@ -511,7 +525,8 @@ function parseAnalysisText(
   return analyses
 }
 
-// Add more detailed error logging to the generatePageAnalysisData function
+// Find the generatePageAnalysisData function and update it to use the Python bridge
+
 export async function generatePageAnalysisData(url: string) {
   console.log(`Generating page analysis data for URL: ${url}`)
   try {
@@ -522,22 +537,7 @@ export async function generatePageAnalysisData(url: string) {
     }
 
     // Get actual page URLs first
-    console.log(`Getting actual page URLs for ${url}`)
-    let actualPageUrls
-    try {
-      actualPageUrls = await getActualPageUrls(url)
-      console.log(`Found actual page URLs:`, actualPageUrls)
-    } catch (error) {
-      console.error(`Error getting actual page URLs:`, error)
-      actualPageUrls = {
-        Homepage: url,
-        "Product Listing": null,
-        "Product Detail": null,
-        "Shopping Cart": null,
-        Checkout: null,
-      }
-      console.log(`Using fallback page URLs:`, actualPageUrls)
-    }
+    const actualPageUrls = await getActualPageUrls(url)
 
     const apiKey = process.env.GOOGLE_API_KEY
 
@@ -546,150 +546,13 @@ export async function generatePageAnalysisData(url: string) {
       return []
     }
 
-    console.log(`Initializing Google Generative AI with API key (length: ${apiKey.length})`)
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-thinking-exp-01-21" })
+    // Import the Python bridge
+    const { callPythonGeneratePageAnalysis } = await import("./python-bridge")
 
-    const generationConfig = {
-      temperature: 0.7,
-      topK: 1,
-      topP: 1,
-      maxOutputTokens: 4096,
-    }
-
-    const safetySettings = [
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-    ]
-
-    // Prepare the prompt (existing code)
-    const prompt = `
-Generate a detailed page analysis for the e-commerce website at ${url}.
-Focus on these page types with their actual URLs:
-- Homepage: ${actualPageUrls["Homepage"]}
-- Product Listing: ${actualPageUrls["Product Listing"] || "Not found"}
-- Product Detail: ${actualPageUrls["Product Detail"] || "Not found"}
-- Shopping Cart: ${actualPageUrls["Shopping Cart"] || "Not found"}
-- Checkout: ${actualPageUrls["Checkout"] || "Not found"}
-
-IMPORTANT: You MUST provide an analysis for ALL FIVE page types listed above, even if some URLs are marked as "Not found". 
-For pages marked as "Not found", provide a general analysis based on typical pages of that type in e-commerce websites.
-
-CRITICAL: Only analyze pages from the ${new URL(url).hostname} domain. Do not reference or analyze pages from other domains.
-
-For each page type, provide the following information in EXACTLY this format:
-
-[Page Type]:
-Page URL: [URL]
-Overall Score: [0-100]
-Score Reasoning: [2-3 sentences explaining the score]
-
-Strengths:
-• [Strength 1]
-• [Strength 2]
-• [Strength 3]
-
-Weaknesses:
-• [Weakness 1]
-• [Weakness 2]
-• [Weakness 3]
-
-Recommendations:
-1. [Suggestion 1]
-   Reasoning: [Explanation]
-   Reference Website:
-   Name: [Website Name]
-   URL: [Website URL]
-   Description: [Brief description]
-
-2. [Suggestion 2]
-   Reasoning: [Explanation]
-   Reference Website:
-   Name: [Website Name]
-   URL: [Website URL]
-   Description: [Brief description]
-
-CRITICAL: Follow this exact format for EACH page type. Use bullet points (•) for strengths and weaknesses, and numbered items for recommendations.
-CRITICAL: Include ALL sections for EACH page type.
-CRITICAL: Separate each page type with a blank line.
-CRITICAL: Do not use markdown formatting like **bold** or *italic*. Use plain text only.
-
-Example:
-
-Homepage:
-Page URL: ${actualPageUrls["Homepage"]}
-Overall Score: 85
-Score Reasoning: The homepage effectively showcases the brand and key products. It has a clean design and clear navigation. However, there's room for improvement in mobile responsiveness and call-to-action placement.
-
-Strengths:
-• Strong brand presentation
-• Clear product categories
-• Engaging hero image
-
-Weaknesses:
-• Limited mobile optimization
-• Cluttered footer
-• Lack of personalized content
-
-Recommendations:
-1. Improve mobile responsiveness
-   Reasoning: A significant portion of e-commerce traffic comes from mobile devices. Enhancing mobile experience can increase conversion rates.
-   Reference Website:
-   Name: Etsy
-   URL: https://www.etsy.com
-   Description: Excellent example of a mobile-friendly e-commerce homepage
-
-2. Streamline footer content
-   Reasoning: A cleaner footer can improve navigation and reduce cognitive load for users.
-   Reference Website:
-   Name: Apple
-   URL: https://www.apple.com
-   Description: Demonstrates a well-organized and minimal footer design
-
-Product Listing:
-Page URL: ${actualPageUrls["Product Listing"] || "Not found"}
-Overall Score: 80
-...
-
-[Continue with similar detailed analyses for Product Detail, Shopping Cart, and Checkout pages]
-`
-
-    console.log(`Prompt prepared (length: ${prompt.length} characters)`)
-    console.log("Sending page analysis prompt to Gemini API")
-
-    let result
-    try {
-      result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig,
-        safetySettings,
-      })
-      console.log("Successfully received response from Gemini API")
-    } catch (error) {
-      console.error("Error calling Gemini API:", error)
-      if (error instanceof Error) {
-        console.error(`Error name: ${error.name}, message: ${error.message}`)
-        console.error(`Error stack: ${error.stack}`)
-      }
-      throw error
-    }
-
-    const response = await result.response
-    const text = response.text()
+    // Call Python for page analysis
+    console.log("Calling Python for page analysis")
+    const text = await callPythonGeneratePageAnalysis(url, actualPageUrls)
+    console.log("Python page analysis completed")
 
     if (!text) {
       throw new Error("Failed to generate page analysis data")

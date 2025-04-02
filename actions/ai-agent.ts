@@ -1,6 +1,4 @@
 "use server"
-
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
 import * as cheerio from "cheerio"
 
 // Remove the import of URL from 'url'
@@ -315,8 +313,6 @@ function findCartIcon($: cheerio.CheerioAPI): string | null {
 
     // Data attributes
     '[data-testid*="cart"]',
-    '[data-testid*="basket"]',
-    '[data-testid*="bag"]',
     '[data-test*="cart"]',
     '[data-component*="cart"]',
     '[data-role*="cart"]',
@@ -790,6 +786,9 @@ function parseError(error: any): string {
   return String(error)
 }
 
+// Find the analyzeWebsite function and replace it with this updated version
+// that uses the Python bridge for AI processing
+
 export async function analyzeWebsite(url: string) {
   console.log(`Starting analysis for URL: ${url}`)
   try {
@@ -824,10 +823,10 @@ Categories:
 ${websiteData.categories
   .map(
     (category) => `
-  URL: ${category.url}
-  Title: ${category.title}
-  Product Count: ${category.productCount}
-  Description: ${category.description}
+URL: ${category.url}
+Title: ${category.title}
+Product Count: ${category.productCount}
+Description: ${category.description}
 `,
   )
   .join("")}
@@ -836,10 +835,10 @@ Products:
 ${websiteData.products
   .map(
     (product) => `
-  URL: ${product.url}
-  Title: ${product.title}
-  Price: ${product.price}
-  Description: ${product.description}
+URL: ${product.url}
+Title: ${product.title}
+Price: ${product.price}
+Description: ${product.description}
 `,
   )
   .join("")}
@@ -857,130 +856,18 @@ Steps: ${websiteData.checkout?.steps.join(", ") || "N/A"}
 
     console.log(`Content prepared for analysis:`, contentForAnalysis)
 
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-thinking-exp-01-21" })
+    // Import the Python bridge
+    const { callPythonAnalyzeWebsite } = await import("./python-bridge")
 
-    const generationConfig = {
-      temperature: 0.9,
-      topK: 1,
-      topP: 1,
-      maxOutputTokens: 4096, // Increased from 2048 to 4096
-    }
-
-    const safetySettings = [
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-    ]
-
-    // First, check if the website is an e-commerce site
-    const ecommerceCheckPrompt = `
-Analyze the following website content and determine if it is an e-commerce website.
-Respond with only "YES" if it is an e-commerce website, or "NO" if it is not.
-
-${contentForAnalysis}
-`
-
-    console.log("Sending e-commerce check prompt to Gemini API")
-    const ecommerceCheckResult = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: ecommerceCheckPrompt }] }],
-      generationConfig,
-      safetySettings,
-    })
-
-    const ecommerceCheckResponse = await ecommerceCheckResult.response
-    const isEcommerce = ecommerceCheckResponse.text().trim().toUpperCase() === "YES"
-    console.log(`E-commerce check result: ${isEcommerce ? "Yes" : "No"}`)
-
-    if (!isEcommerce) {
-      return JSON.stringify({ isEcommerce: false, message: "This website does not appear to be an e-commerce site." })
-    }
-
-    const prompt = `Analyze this e-commerce website content and provide a high-level CX (Customer Experience) evaluation. Focus ONLY on these overall aspects:
-
-1. Visual Appeal & Branding (0-100): Assess the overall aesthetic, color scheme, typography, and how well the brand identity is communicated.
-2. User Journey (0-100): Evaluate the clarity of the path from landing page to checkout, including product discovery and information accessibility.
-3. Intuitive Navigation (0-100): Judge the ease of finding products, using search functionality, and moving between different sections of the site.
-4. Visual Hierarchy (0-100): Analyze how well the layout guides the user's attention to important elements and facilitates easy scanning of content.
-5. Value Proposition (0-100): Assess how clearly and convincingly the site communicates its unique selling points and benefits to the customer.
-6. Call to Action (0-100): Evaluate the prominence, clarity, and persuasiveness of CTAs throughout the site.
-
-For each aspect, provide:
-1. A score out of 100
-2. A rationale for the score (2-3 sentences)
-3. Three strengths
-4. Three weaknesses
-
-Aim for a balanced assessment. Recognize strengths where they exist, but also identify areas for improvement. Use the full range of scores as appropriate, avoiding extremes unless truly warranted.
-
-Website Content:
-${contentForAnalysis}
-
-Format your response exactly like this:
-
-Visual Appeal & Branding: [score]/100
-Rationale: [2-3 sentences explaining the score and comparing to industry benchmark]
-Strengths:
-• [Strength 1]
-• [Strength 2]
-• [Strength 3]
-Weaknesses:
-• [Weakness 1]
-• [Weakness 2]
-• [Weakness 3]
-
-[Repeat the above format for the remaining aspects]
-
-Detailed Summary:
-[Provide a comprehensive 5-7 sentence summary of the website's overall CX, highlighting key strengths, weaknesses, and areas for improvement. Include insights on how these factors collectively impact the user experience and potential conversion rates. Each sentence should be on a new line.]
-
-Specific Actionable Items:
-• Visual Appeal & Branding: [Detailed, specific action item]
-• User Journey: [Detailed, specific action item]
-• Intuitive Navigation: [Detailed, specific action item]
-• Visual Hierarchy: [Detailed, specific action item]
-• Value Proposition: [Detailed, specific action item]
-• Call to Action: [Detailed, specific action item]
-• Additional Recommendation: [Detailed, specific action item]
-
-Ensure that all sections, including the Specific Actionable Items, are fully completed in your response.
-`
-
-    console.log("Sending main analysis prompt to Gemini API")
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig,
-      safetySettings,
-    })
-
-    const response = await result.response
-    const text = response.text()
-
-    if (!text) {
-      throw new Error("Failed to generate analysis")
-    }
-
-    console.log("Analysis generated successfully")
-    const finalResult = JSON.stringify({ isEcommerce: true, analysis: text })
+    // Call Python for analysis
+    console.log("Calling Python for website analysis")
+    const finalResult = await callPythonAnalyzeWebsite(contentForAnalysis)
+    console.log("Python analysis completed")
 
     // Cache the result
     cache[url] = { result: finalResult, timestamp: Date.now() }
 
     console.log(`Analysis completed for URL: ${url}`)
-    console.log(`Final result:`, finalResult)
     return finalResult
   } catch (error) {
     console.error(`Error analyzing website ${url}:`, error)

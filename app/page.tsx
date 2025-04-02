@@ -225,16 +225,16 @@ export default function Home() {
                 const strengths = strengthsMatch
                   ? strengthsMatch[1]
                       .split("\n")
-                      .map((s) => s.trim())
-                      .filter((s) => s.startsWith("•"))
-                      .map((s) => s.substring(1).trim())
+                      .map((s: string) => s.trim())
+                      .filter((s: string) => s.startsWith("•"))
+                      .map((s: string) => s.substring(1).trim())
                   : []
                 const weaknesses = weaknessesMatch
                   ? weaknessesMatch[1]
                       .split("\n")
-                      .map((s) => s.trim())
-                      .filter((s) => s.startsWith("•"))
-                      .map((s) => s.substring(1).trim())
+                      .map((s: string) => s.trim())
+                      .filter((s: string) => s.startsWith("•"))
+                      .map((s: string) => s.substring(1).trim())
                   : []
 
                 componentResults.push({
@@ -298,19 +298,19 @@ export default function Home() {
               if (actionableItemsMatch) {
                 const items = actionableItemsMatch[1]
                   .split("\n")
-                  .map((item) => item.trim())
-                  .filter((item) => item.startsWith("•"))
-                  .map((item) => {
+                  .map((item: string) => item.trim())
+                  .filter((item: string) => item.startsWith("•"))
+                  .map((item: { substring: (arg0: number) => { (): any; new(): any; split: { (arg0: string): { (): any; new(): any; map: { (arg0: (s: any) => any): [any, ...any[]]; new(): any } }; new(): any } } }) => {
                     const [category, ...actionParts] = item
                       .substring(1)
                       .split(":")
-                      .map((s) => s.trim())
+                      .map((s: string) => s.trim())
                     return {
                       category,
                       action: actionParts.join(":").trim(),
                     }
                   })
-                  .filter((item) => item.category && item.action)
+                  .filter((item: { category: any; action: any }) => item.category && item.action)
 
                 setActionableItemsArray((prev) => {
                   const newActionableItemsArray = [...prev]
